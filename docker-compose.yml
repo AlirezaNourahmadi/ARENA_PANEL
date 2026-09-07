@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: arena
+      POSTGRES_USER: arena
+      POSTGRES_PASSWORD: arena
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arena -d arena"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - arena-postgres:/var/lib/postgresql/data
+
+  arena:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8000"
+      - "11000"
+      - "11001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  gateway:
+    build:
+      context: gateway
+    environment:
+      ARENA_API_URL: http://arena:8000
+      ARENA_GATEWAY_SECRET: ${ARENA_GATEWAY_SECRET}
+      ARENA_GATEWAY_LISTEN: :8081
+      ARENA_TRUST_PROXY_HEADERS: ${ARENA_TRUST_PROXY_HEADERS:-true}
+      ARENA_TRUSTED_PROXY_HOPS: ${ARENA_TRUSTED_PROXY_HOPS:-1}
+      ARENA_TRUST_CLOUDFLARE_HEADER: ${ARENA_TRUST_CLOUDFLARE_HEADER:-false}
+    depends_on:
+      arena:
+        condition: service_healthy
+    expose:
+      - "8081"
+
+  caddy:
+    image: caddy:2.10-alpine
+    depends_on:
+      - arena
+      - gateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+
+volumes:
+  arena-postgres:

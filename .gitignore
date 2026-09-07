@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.db
+*.egg-info/
+frontend/node_modules/
+frontend/dist/
+gateway/arena-gateway
+runtime/
+.DS_Store

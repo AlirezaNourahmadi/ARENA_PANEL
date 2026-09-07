@@ -1,0 +1,10 @@
+:80 {
+	encode zstd gzip
+
+	@gateway path /edge/*
+	reverse_proxy @gateway gateway:8081 {
+		header_up X-Arena-Client-IP {remote_host}
+	}
+
+	reverse_proxy arena:8000
+}
