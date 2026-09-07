@@ -6,9 +6,9 @@ from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from ..config import get_settings
 from ..database import get_db
 from ..models import AccessKey, User
+from ..public_url import public_base_url
 from ..security import verify_subscription
 from ..services.accounts import user_allowed, user_expiry
 from ..services.profiles import subscription_document
@@ -41,7 +41,9 @@ def subscription(
         )
     )
     allowed, _ = user_allowed(user)
-    document = subscription_document(user, keys if allowed else [])
+    document = subscription_document(
+        user, keys if allowed else [], public_base_url(request)
+    )
     body = document if format == "raw" else base64.b64encode(document.encode()).decode()
     expiry = user_expiry(user)
     expiry_epoch = int(expiry.timestamp()) if expiry else 0

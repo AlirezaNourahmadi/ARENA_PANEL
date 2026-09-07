@@ -32,7 +32,9 @@ docker compose up -d --build
 http://localhost:8080/login
 ```
 
-قبل از هر استقرار عمومی، مقادیر `ARENA_APP_SECRET`، `ARENA_GATEWAY_SECRET`، `ARENA_ADMIN_PASSWORD`، `ARENA_PUBLIC_URL` و `ARENA_XRAY_PUBLIC_HOST` را در `.env` تغییر دهید.
+قبل از هر استقرار عمومی، مقادیر `ARENA_APP_SECRET`، `ARENA_GATEWAY_SECRET` و `ARENA_ADMIN_PASSWORD` را تغییر دهید. مقدار پیش‌فرض `ARENA_PUBLIC_URL=auto` باعث می‌شود لینک سابسکریپشن، آدرس VLESS/VMess، `Host` و `SNI` از دامنه همان درخواست ساخته شوند؛ بنابراین سورس به `localhost` یا دامنه یک پلتفرم خاص وابسته نیست.
+
+اگر دامنه ثابتی می‌خواهید، `ARENA_PUBLIC_URL=https://panel.example.com` را صریح تنظیم کنید. در صفحه نودها نیز گزینه «آدرس از دامنه پنل» برای نودهای Xray قابل فعال یا غیرفعال‌کردن است.
 
 ## آزمون انتها‌به‌انتها
 
@@ -63,3 +65,7 @@ scripts/     آزمون واقعی data plane
 ## نکته درباره Xray
 
 Xray Core 26.3.27 برای WebSocket و VMess هشدار deprecation نمایش می‌دهد. این دو در فاز ۱ به درخواست محصول پشتیبانی شده‌اند، اما مسیر توسعه بعدی باید VLESS Encryption و XHTTP/H2/H3 باشد.
+
+## نکته درباره اجرا
+
+ساخت لینک به‌تنهایی سرور عمومی ایجاد نمی‌کند. برای پینگ و عبور ترافیک خارج از دستگاه توسعه، هر سه سرویس `arena`، `gateway` و ingress به‌همراه PostgreSQL باید روی یک میزبان عمومی deploy شوند و مسیر `/edge/*` به Gateway برسد.

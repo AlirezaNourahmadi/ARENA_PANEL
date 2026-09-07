@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     )
 
     env: str = "development"
-    public_url: str = "http://localhost:8080"
+    public_url: str = "auto"
     database_url: str = "sqlite:///./arena.db"
     app_secret: str = "development-only-change-this-secret"
     gateway_secret: str = "development-only-gateway-secret"
@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     @field_validator("public_url")
     @classmethod
     def strip_public_url(cls, value: str) -> str:
-        return value.rstrip("/")
+        value = value.strip()
+        return value if value.lower() == "auto" else value.rstrip("/")
 
     @field_validator("gateway_public_path")
     @classmethod

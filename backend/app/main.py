@@ -1,3 +1,4 @@
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -35,13 +36,13 @@ def seed_database() -> None:
             db.flush()
             audit(db, "admin.seeded", entity_type="admin", entity_id=admin.id)
 
-        secure = settings.public_url.startswith("https://")
         defaults = [
             ("ARENA VLESS", "arena-vless", "vless"),
             ("ARENA VMess", "arena-vmess", "vmess"),
         ]
         for name, slug, protocol in defaults:
-            if not db.scalar(select(Node).where(Node.slug == slug)):
+            node = db.scalar(select(Node).where(Node.slug == slug))
+            if not node:
                 db.add(
                     Node(
                         name=name,
@@ -49,16 +50,29 @@ def seed_database() -> None:
                         kind="xray",
                         protocol=protocol,
                         transport="websocket",
-                        host=settings.xray_public_host,
-                        port=settings.xray_public_port,
-                        security="tls" if secure else "none",
-                        sni=settings.xray_public_host if secure else "",
-                        websocket_host=settings.xray_public_host,
+                        host="auto",
+                        port=443,
+                        security="tls",
+                        sni="",
+                        websocket_host="auto",
                         path=settings.gateway_public_path,
                         fingerprint="chrome",
                         alpn="http/1.1",
+                        metadata_json=json.dumps({"adaptive_endpoint": True}),
                     )
                 )
+                continue
+
+            metadata = json.loads(node.metadata_json or "{}")
+            if "adaptive_endpoint" not in metadata:
+                metadata["adaptive_endpoint"] = True
+                node.metadata_json = json.dumps(metadata, separators=(",", ":"))
+            if metadata["adaptive_endpoint"]:
+                node.host = "auto"
+                node.port = 443
+                node.security = "tls"
+                node.sni = ""
+                node.websocket_host = "auto"
         db.commit()
 
 
@@ -79,9 +93,14 @@ app = FastAPI(
     redoc_url=None,
     lifespan=lifespan,
 )
+cors_origins = (
+    [settings.public_url]
+    if settings.env == "development" and settings.public_url.lower() != "auto"
+    else []
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.public_url] if settings.env == "development" else [],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-CSRF-Token", "X-Arena-Gateway"],

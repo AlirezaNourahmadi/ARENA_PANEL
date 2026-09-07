@@ -1,13 +1,14 @@
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..config import get_settings
 from ..database import get_db
 from ..models import AccessKey, Admin, ConnectionSession, Node, User
+from ..public_url import public_base_url
 from ..schemas import UserCreate, UserUpdate
 from ..security import require_csrf, sign_subscription
 from ..services.accounts import create_access_key, serialize_user
@@ -32,10 +33,12 @@ def _get_user(db: Session, user_id: str) -> User:
     return user
 
 
-def _serialize(db: Session, user: User) -> dict:
+def _serialize(db: Session, user: User, request: Request) -> dict:
     settings = get_settings()
     data = serialize_user(
-        user, settings.public_url, sign_subscription(user.id, user.subscription_version)
+        user,
+        public_base_url(request),
+        sign_subscription(user.id, user.subscription_version),
     )
     active_cutoff = datetime.now(timezone.utc).timestamp() - settings.session_stale_seconds
     active_sessions = list(
@@ -59,15 +62,18 @@ def _serialize(db: Session, user: User) -> dict:
 
 @router.get("")
 def list_users(
-    _: Admin = Depends(require_csrf), db: Session = Depends(get_db)
+    request: Request,
+    _: Admin = Depends(require_csrf),
+    db: Session = Depends(get_db),
 ) -> list[dict]:
     users = db.scalars(select(User).order_by(User.created_at.desc())).all()
-    return [_serialize(db, user) for user in users]
+    return [_serialize(db, user, request) for user in users]
 
 
 @router.post("", status_code=201)
 async def create_user(
     payload: UserCreate,
+    request: Request,
     admin: Admin = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -97,15 +103,18 @@ async def create_user(
     )
     db.commit()
     await xray_runtime.reconcile(db)
-    return _serialize(db, user)
+    return _serialize(db, user, request)
 
 
 @router.get("/{user_id}")
 def user_detail(
-    user_id: str, _: Admin = Depends(require_csrf), db: Session = Depends(get_db)
+    user_id: str,
+    request: Request,
+    _: Admin = Depends(require_csrf),
+    db: Session = Depends(get_db),
 ) -> dict:
     user = _get_user(db, user_id)
-    data = _serialize(db, user)
+    data = _serialize(db, user, request)
     keys = db.scalars(
         select(AccessKey)
         .where(AccessKey.user_id == user.id)
@@ -128,6 +137,7 @@ def user_detail(
 async def update_user(
     user_id: str,
     payload: UserUpdate,
+    request: Request,
     admin: Admin = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -149,12 +159,15 @@ async def update_user(
     )
     db.commit()
     await xray_runtime.reconcile(db)
-    return _serialize(db, user)
+    return _serialize(db, user, request)
 
 
 @router.post("/{user_id}/reset-usage")
 async def reset_usage(
-    user_id: str, admin: Admin = Depends(require_csrf), db: Session = Depends(get_db)
+    user_id: str,
+    request: Request,
+    admin: Admin = Depends(require_csrf),
+    db: Session = Depends(get_db),
 ) -> dict:
     user = _get_user(db, user_id)
     user.used_up_bytes = 0
@@ -162,18 +175,21 @@ async def reset_usage(
     audit(db, "user.usage_reset", actor=admin.username, entity_type="user", entity_id=user.id)
     db.commit()
     await xray_runtime.reconcile(db)
-    return _serialize(db, user)
+    return _serialize(db, user, request)
 
 
 @router.post("/{user_id}/rotate-subscription")
 def rotate_subscription(
-    user_id: str, admin: Admin = Depends(require_csrf), db: Session = Depends(get_db)
+    user_id: str,
+    request: Request,
+    admin: Admin = Depends(require_csrf),
+    db: Session = Depends(get_db),
 ) -> dict:
     user = _get_user(db, user_id)
     user.subscription_version += 1
     audit(db, "user.subscription_rotated", actor=admin.username, entity_type="user", entity_id=user.id)
     db.commit()
-    return _serialize(db, user)
+    return _serialize(db, user, request)
 
 
 @router.post("/{user_id}/nodes/{node_id}")
@@ -219,24 +235,29 @@ async def detach_node(
 
 @router.get("/{user_id}/formats")
 def user_formats(
-    user_id: str, _: Admin = Depends(require_csrf), db: Session = Depends(get_db)
+    user_id: str,
+    request: Request,
+    _: Admin = Depends(require_csrf),
+    db: Session = Depends(get_db),
 ) -> dict:
     user = _get_user(db, user_id)
-    settings = get_settings()
+    base_url = public_base_url(request)
     token = sign_subscription(user.id, user.subscription_version)
-    subscription_url = f"{settings.public_url}/sub/{token}"
+    subscription_url = f"{base_url}/sub/{token}"
     keys = db.scalars(
         select(AccessKey)
         .where(AccessKey.user_id == user.id)
         .options(joinedload(AccessKey.node))
     ).all()
-    direct = [uri for key in keys if (uri := proxy_uri(user, key.node, key))]
+    direct = [
+        uri for key in keys if (uri := proxy_uri(user, key.node, key, base_url))
+    ]
     downloads = [
         {
             "node_id": key.node_id,
             "node_name": key.node.name,
             "protocol": key.node.protocol,
-            "url": f"{settings.public_url}/api/users/{user.id}/profiles/{key.node_id}",
+            "url": f"{base_url}/api/users/{user.id}/profiles/{key.node_id}",
         }
         for key in keys
         if key.node.protocol in {"wireguard", "cisco"}

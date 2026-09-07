@@ -43,7 +43,7 @@ def test_user_subscription_and_gateway_policy_flow():
         document = base64.b64decode(subscription.text).decode()
         lines = document.strip().splitlines()
         assert lines[0].startswith("vless://00000000-0000-4000-8000-000000000000@127.0.0.1:1")
-        assert any(line.startswith("vless://") and "@proxy.test:443" in line for line in lines[1:])
+        assert any(line.startswith("vless://") and "@testserver:80" in line for line in lines[1:])
         assert any(line.startswith("vmess://") for line in lines[1:])
 
         vless = next(node for node in nodes if node["protocol"] == "vless")
@@ -95,3 +95,55 @@ def test_csrf_and_subscription_rotation():
         assert rotated["subscription_url"] != old_url
         assert client.get(old_url).status_code == 404
         assert client.get(rotated["subscription_url"]).status_code == 200
+
+
+def test_subscription_adapts_to_forwarded_public_origin():
+    with TestClient(app) as client:
+        headers = login(client)
+        public_headers = {
+            **headers,
+            "host": "internal.service:8000",
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "panel.example.com",
+        }
+        nodes = client.get("/api/nodes", headers=public_headers).json()
+        created = client.post(
+            "/api/users",
+            headers=public_headers,
+            json={"name": "Adaptive", "node_ids": [node["id"] for node in nodes]},
+        )
+        assert created.status_code == 201, created.text
+        user = created.json()
+        assert user["subscription_url"].startswith("https://panel.example.com/sub/")
+
+        formats = client.get(
+            f"/api/users/{user['id']}/formats", headers=public_headers
+        ).json()
+        assert formats["subscription_url"] == user["subscription_url"]
+        vless = next(link for link in formats["direct_links"] if link.startswith("vless://"))
+        assert "@panel.example.com:443" in vless
+        assert "security=tls" in vless
+        assert "host=panel.example.com" in vless
+        assert "sni=panel.example.com" in vless
+
+        subscription = client.get(user["subscription_url"], headers=public_headers)
+        document = base64.b64decode(subscription.text).decode()
+        assert "@panel.example.com:443" in document
+
+        alternate_headers = {
+            **headers,
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "edge.example.net:8443",
+        }
+        alternate = client.get(
+            f"/api/users/{user['id']}/formats", headers=alternate_headers
+        ).json()
+        alternate_vless = next(
+            link for link in alternate["direct_links"] if link.startswith("vless://")
+        )
+        assert alternate["subscription_url"].startswith(
+            "https://edge.example.net:8443/sub/"
+        )
+        assert "@edge.example.net:8443" in alternate_vless
+        assert "host=edge.example.net%3A8443" in alternate_vless
+        assert "sni=edge.example.net" in alternate_vless

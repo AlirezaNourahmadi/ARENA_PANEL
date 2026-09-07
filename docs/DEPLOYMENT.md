@@ -15,16 +15,28 @@ Compose یک volume فقط برای PostgreSQL می‌سازد. برنامه و 
 | متغیر | کاربرد |
 |---|---|
 | `ARENA_ENV=production` | فعال‌کردن کنترل secretهای ضعیف |
-| `ARENA_PUBLIC_URL` | آدرس HTTPS عمومی پنل و subscription |
+| `ARENA_PUBLIC_URL=auto` | ساخت آدرس پنل و کانفیگ‌ها از دامنه درخواست؛ می‌توان URL ثابت HTTPS نیز داد |
 | `ARENA_DATABASE_URL` | DSN پایدار PostgreSQL |
 | `ARENA_APP_SECRET` | امضای subscription و رمزنگاری secretها، حداقل ۳۲ کاراکتر |
 | `ARENA_GATEWAY_SECRET` | احراز هویت Gateway، حداقل ۳۲ کاراکتر |
 | `ARENA_ADMIN_USERNAME` | مدیر اولیه |
 | `ARENA_ADMIN_PASSWORD` | رمز قوی مدیر اولیه |
 | `ARENA_COOKIE_SECURE=true` | ارسال cookie فقط روی HTTPS |
-| `ARENA_XRAY_PUBLIC_HOST` | دامنه عمومی کانفیگ‌ها |
-| `ARENA_XRAY_PUBLIC_PORT=443` | پورت عمومی TLS |
 | `ARENA_TRUSTED_PROXY_HOPS` | تعداد proxyهای قابل اعتماد جلوی Gateway |
+
+## آدرس‌دهی adaptive
+
+نودهای پیش‌فرض VLESS و VMess با `adaptive_endpoint=true` ساخته می‌شوند. در این حالت برنامه برای هر درخواست موارد زیر را از origin عمومی پنل استخراج می‌کند:
+
+- آدرس و پورت VLESS/VMess
+- نوع امنیت بر اساس `https` یا `http`
+- مقدار TLS SNI
+- مقدار WebSocket Host
+- مبدا لینک subscription و دانلودها
+
+ترتیب تشخیص origin در حالت `auto`، ابتدا `X-Forwarded-Proto` و `X-Forwarded-Host` و سپس scheme و `Host` خود درخواست است. Ingress production باید headerهای forwarded را خودش بازنویسی کند. اگر این تضمین وجود ندارد یا فقط یک دامنه مجاز است، `ARENA_PUBLIC_URL` را به URL ثابت همان دامنه تنظیم کنید.
+
+نودهای خارجی WireGuard/Cisco و نودهای Xray که گزینه «آدرس از دامنه پنل» در آن‌ها خاموش است، همچنان از آدرس و پورت ذخیره‌شده خود نود استفاده می‌کنند.
 
 ## استقرار روی پلتفرم کانتینری
 
@@ -36,6 +48,8 @@ Compose یک volume فقط برای PostgreSQL می‌سازد. برنامه و 
 6. Gateway و برنامه باید در یک شبکه خصوصی به هم و Xray دسترسی داشته باشند.
 7. health check برنامه `/api/health` و health check Gateway `/health` است.
 8. برای فاز ۱ Gateway را با یک replica اجرا کنید.
+
+تنها deploy کردن کانتینر `arena` کافی نیست؛ اتصال عمومی WebSocket به سرویس `gateway` و اتصال خصوصی Gateway به Xray داخل سرویس `arena` وابسته است.
 
 در Northflank یا سرویس مشابه نیازی به volume روی `/data` نیست. فقط PostgreSQL باید پایدار باشد؛ config Xray در startup از دیتابیس بازسازی می‌شود.
 

@@ -6,8 +6,8 @@ import Modal from './Modal'
 
 const defaults = {
   name: '', slug: '', kind: 'xray', protocol: 'vless', transport: 'websocket',
-  host: '', port: 443, security: 'tls', sni: '', websocket_host: '', path: '/edge',
-  fingerprint: 'chrome', alpn: ['http/1.1'], enabled: true, metadata: {},
+  host: 'auto', port: 443, security: 'tls', sni: '', websocket_host: 'auto', path: '/edge',
+  fingerprint: 'chrome', alpn: ['http/1.1'], enabled: true, metadata: { adaptive_endpoint: true },
 }
 
 function NodeForm({ initial = defaults, editing = false, onSubmit }) {
@@ -19,7 +19,19 @@ function NodeForm({ initial = defaults, editing = false, onSubmit }) {
   function protocol(value) {
     if (value === 'wireguard') setForm((f) => ({ ...f, protocol: value, kind: 'wireguard', transport: 'external', security: 'none', port: 51820 }))
     else if (value === 'cisco') setForm((f) => ({ ...f, protocol: value, kind: 'cisco', transport: 'external', security: 'tls', port: 443 }))
-    else setForm((f) => ({ ...f, protocol: value, kind: 'xray', transport: 'websocket', port: 443 }))
+    else setForm((f) => ({ ...f, protocol: value, kind: 'xray', transport: 'websocket', host: 'auto', port: 443, security: 'tls', sni: '', websocket_host: 'auto', metadata: { ...f.metadata, adaptive_endpoint: true } }))
+  }
+
+  function adaptiveEndpoint(enabled) {
+    setForm((f) => ({
+      ...f,
+      host: enabled ? 'auto' : (f.host === 'auto' ? '' : f.host),
+      port: enabled ? 443 : f.port,
+      security: enabled ? 'tls' : f.security,
+      sni: enabled ? '' : f.sni,
+      websocket_host: enabled ? 'auto' : (f.websocket_host === 'auto' ? '' : f.websocket_host),
+      metadata: { ...f.metadata, adaptive_endpoint: enabled },
+    }))
   }
 
   async function submit(event) {
@@ -28,16 +40,20 @@ function NodeForm({ initial = defaults, editing = false, onSubmit }) {
   }
 
   const xray = form.kind === 'xray'
+  const adaptive = xray && Boolean(form.metadata?.adaptive_endpoint)
   return <form className="form-grid" onSubmit={submit}>
     <label><span>نام نمایشی</span><input value={form.name} onChange={(e) => set('name', e.target.value)} required /></label>
     {!editing && <label><span>شناسه</span><input dir="ltr" value={form.slug} onChange={(e) => set('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} required /></label>}
     {!editing && <label><span>پروتکل</span><select value={form.protocol} onChange={(e) => protocol(e.target.value)}><option value="vless">VLESS</option><option value="vmess">VMess</option><option value="wireguard">WireGuard</option><option value="cisco">Cisco / OpenConnect</option></select></label>}
-    <label><span>آدرس عمومی</span><input dir="ltr" value={form.host} onChange={(e) => set('host', e.target.value)} required /></label>
-    <label><span>پورت</span><input type="number" min="1" max="65535" value={form.port} onChange={(e) => set('port', Number(e.target.value))} /></label>
     {xray && <>
-      <label><span>امنیت</span><select value={form.security} onChange={(e) => set('security', e.target.value)}><option value="tls">TLS</option><option value="none">None</option></select></label>
-      <label><span>SNI</span><input dir="ltr" value={form.sni} onChange={(e) => set('sni', e.target.value)} /></label>
-      <label><span>WebSocket Host</span><input dir="ltr" value={form.websocket_host} onChange={(e) => set('websocket_host', e.target.value)} /></label>
+      <label className="check-row span-2"><input type="checkbox" checked={adaptive} onChange={(e) => adaptiveEndpoint(e.target.checked)} /><span>آدرس از دامنه پنل</span></label>
+    </>}
+    <label><span>آدرس عمومی</span><input dir="ltr" value={form.host} onChange={(e) => set('host', e.target.value)} required disabled={adaptive} /></label>
+    <label><span>پورت</span><input type="number" min="1" max="65535" value={form.port} onChange={(e) => set('port', Number(e.target.value))} disabled={adaptive} /></label>
+    {xray && <>
+      <label><span>امنیت</span><select value={form.security} onChange={(e) => set('security', e.target.value)} disabled={adaptive}><option value="tls">TLS</option><option value="none">None</option></select></label>
+      <label><span>SNI</span><input dir="ltr" value={form.sni} onChange={(e) => set('sni', e.target.value)} disabled={adaptive} /></label>
+      <label><span>WebSocket Host</span><input dir="ltr" value={form.websocket_host} onChange={(e) => set('websocket_host', e.target.value)} disabled={adaptive} /></label>
       <label><span>Path پایه</span><input dir="ltr" value={form.path} onChange={(e) => set('path', e.target.value)} /></label>
       <label><span>Fingerprint</span><select value={form.fingerprint} onChange={(e) => set('fingerprint', e.target.value)}>{['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random', 'randomized'].map((item) => <option key={item}>{item}</option>)}</select></label>
       <fieldset className="alpn-field"><legend>ALPN</legend>{['http/1.1', 'h2', 'h3'].map((item) => <label className="check-row compact" key={item}><input type="checkbox" checked={form.alpn.includes(item)} onChange={(e) => set('alpn', e.target.checked ? [...form.alpn, item] : form.alpn.filter((value) => value !== item))} /><span>{item}</span></label>)}</fieldset>
@@ -66,7 +82,7 @@ export default function Nodes({ nodes, reload, notify }) {
     <section className="node-grid">
       {nodes.map((node) => <article className={`node-card ${node.enabled ? '' : 'disabled'}`} key={node.id}>
         <header><div className={`protocol-mark protocol-${node.protocol}`}><Server size={21} /></div><div><strong>{node.name}</strong><span>{node.slug}</span></div><span className={`status-pill ${node.enabled ? 'ok' : 'off'}`}>{node.enabled ? 'فعال' : 'خاموش'}</span></header>
-        <div className="node-address" dir="ltr"><Globe2 size={17} /><strong>{node.host}:{node.port}</strong></div>
+        <div className="node-address"><Globe2 size={17} /><strong dir={node.metadata?.adaptive_endpoint ? 'rtl' : 'ltr'}>{node.metadata?.adaptive_endpoint ? 'دامنه پنل (خودکار)' : `${node.host}:${node.port}`}</strong></div>
         <dl className="node-specs">
           <div><dt><Route size={15} />پروتکل</dt><dd>{node.protocol.toUpperCase()} / {node.transport === 'websocket' ? 'WS' : 'External'}</dd></div>
           <div><dt><Fingerprint size={15} />Fingerprint</dt><dd>{node.fingerprint}</dd></div>

@@ -1,13 +1,24 @@
 import base64
 import json
+from dataclasses import dataclass
 from urllib.parse import quote, urlencode
 
 from ..models import AccessKey, Node, User
+from ..public_url import public_endpoint
 from ..security import decrypt_payload
 from .accounts import days_remaining
 
 
 INFO_UUID = "00000000-0000-4000-8000-000000000000"
+
+
+@dataclass(frozen=True)
+class ProxyEndpoint:
+    host: str
+    port: int
+    security: str
+    sni: str
+    websocket_host: str
 
 
 def _b64(value: bytes) -> str:
@@ -37,59 +48,100 @@ def public_ws_path(node: Node, user: User) -> str:
     return f"{node.path.rstrip('/')}/{node.id}/{user.id}"
 
 
-def vless_uri(user: User, node: Node, key: AccessKey) -> str:
+def _proxy_endpoint(node: Node, base_url: str | None) -> ProxyEndpoint:
+    metadata = json.loads(node.metadata_json or "{}")
+    adaptive = metadata.get("adaptive_endpoint", False) or node.host.lower() == "auto"
+    if adaptive and base_url:
+        origin = public_endpoint(base_url)
+        return ProxyEndpoint(
+            host=origin.host,
+            port=origin.port,
+            security=origin.security,
+            sni=origin.host if origin.security == "tls" else "",
+            websocket_host=origin.authority,
+        )
+
+    host = node.host
+    return ProxyEndpoint(
+        host=host,
+        port=node.port,
+        security=node.security,
+        sni=node.sni or node.host,
+        websocket_host=node.websocket_host or node.sni or node.host,
+    )
+
+
+def vless_uri(
+    user: User, node: Node, key: AccessKey, base_url: str | None = None
+) -> str:
+    endpoint = _proxy_endpoint(node, base_url)
     params = {
         "encryption": "none",
-        "security": node.security,
+        "security": endpoint.security,
         "type": "ws",
-        "host": node.websocket_host or node.sni or node.host,
+        "host": endpoint.websocket_host,
         "path": public_ws_path(node, user),
         "fp": node.fingerprint,
         "alpn": node.alpn,
     }
-    if node.security == "tls":
-        params["sni"] = node.sni or node.host
+    if endpoint.security == "tls":
+        params["sni"] = endpoint.sni
     label = quote(f"ARENA - {user.name} - {node.name}", safe="")
-    return f"vless://{key.credential}@{node.host}:{node.port}?{urlencode(params)}#{label}"
+    uri_host = (
+        f"[{endpoint.host}]"
+        if ":" in endpoint.host and not endpoint.host.startswith("[")
+        else endpoint.host
+    )
+    return (
+        f"vless://{key.credential}@{uri_host}:{endpoint.port}"
+        f"?{urlencode(params)}#{label}"
+    )
 
 
-def vmess_uri(user: User, node: Node, key: AccessKey) -> str:
+def vmess_uri(
+    user: User, node: Node, key: AccessKey, base_url: str | None = None
+) -> str:
+    endpoint = _proxy_endpoint(node, base_url)
     payload = {
         "v": "2",
         "ps": f"ARENA - {user.name} - {node.name}",
-        "add": node.host,
-        "port": str(node.port),
+        "add": endpoint.host,
+        "port": str(endpoint.port),
         "id": key.credential,
         "aid": "0",
         "scy": "auto",
         "net": "ws",
         "type": "none",
-        "host": node.websocket_host or node.sni or node.host,
+        "host": endpoint.websocket_host,
         "path": public_ws_path(node, user),
-        "tls": "tls" if node.security == "tls" else "",
-        "sni": node.sni or node.host,
+        "tls": "tls" if endpoint.security == "tls" else "",
+        "sni": endpoint.sni,
         "alpn": node.alpn,
         "fp": node.fingerprint,
     }
     return "vmess://" + _b64(json.dumps(payload, ensure_ascii=False).encode())
 
 
-def proxy_uri(user: User, node: Node, key: AccessKey) -> str | None:
+def proxy_uri(
+    user: User, node: Node, key: AccessKey, base_url: str | None = None
+) -> str | None:
     if not node.enabled or not key.enabled:
         return None
     if node.protocol == "vless":
-        return vless_uri(user, node, key)
+        return vless_uri(user, node, key, base_url)
     if node.protocol == "vmess":
-        return vmess_uri(user, node, key)
+        return vmess_uri(user, node, key, base_url)
     return None
 
 
-def subscription_document(user: User, keys: list[AccessKey]) -> str:
+def subscription_document(
+    user: User, keys: list[AccessKey], base_url: str | None = None
+) -> str:
     links = [info_profile(user)]
     links.extend(
         uri
         for key in keys
-        if (uri := proxy_uri(user, key.node, key)) is not None
+        if (uri := proxy_uri(user, key.node, key, base_url)) is not None
     )
     return "\n".join(links) + "\n"
 

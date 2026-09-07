@@ -13,7 +13,7 @@ os.environ.update(
         "ARENA_ADMIN_USERNAME": "admin",
         "ARENA_ADMIN_PASSWORD": "arena-test-password",
         "ARENA_XRAY_ENABLED": "false",
-        "ARENA_PUBLIC_URL": "http://testserver",
+        "ARENA_PUBLIC_URL": "auto",
         "ARENA_XRAY_PUBLIC_HOST": "proxy.test",
         "ARENA_XRAY_PUBLIC_PORT": "443",
     }
