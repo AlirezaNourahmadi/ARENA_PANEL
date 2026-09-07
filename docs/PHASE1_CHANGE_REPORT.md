@@ -2,6 +2,15 @@
 
 تاریخ گزارش: ۱۴۰۵/۰۶/۱۶ (2026-09-07)
 
+## شاخه Railway
+
+- شاخه مستقل `railway` بدون تغییر رفتار شاخه `main` ایجاد شد.
+- PostgreSQL URL استاندارد Railway به driver صریح Psycopg 3 تبدیل می‌شود.
+- migration تا آماده‌شدن دیتابیس Railway با فاصله کنترل‌شده retry می‌شود.
+- Edge اختصاصی Caddy برای route کردن پنل و WebSocket روی یک دامنه عمومی افزوده شد.
+- `arena`، `gateway` و PostgreSQL فقط روی شبکه خصوصی Railway قرار می‌گیرند و تنها `edge` عمومی است.
+- Edge مخصوص Railway با VLESS، VMess، DNS/UDP و ثابت‌ماندن PID هسته به‌صورت محلی acceptance شد.
+
 ## به‌روزرسانی آدرس‌دهی عمومی
 
 - مقدار پیش‌فرض `ARENA_PUBLIC_URL` از آدرس ثابت localhost به `auto` تغییر کرد.

@@ -24,3 +24,15 @@ def test_production_accepts_explicit_credentials():
         admin_password="a-long-admin-password-2026",
     )
     settings.validate_production_secrets()
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "postgres://arena:secret@postgres.railway.internal:5432/railway",
+        "postgresql://arena:secret@postgres.railway.internal:5432/railway",
+    ],
+)
+def test_railway_postgres_url_uses_psycopg3_driver(source: str):
+    settings = Settings(database_url=source)
+    assert settings.database_url.startswith("postgresql+psycopg://")

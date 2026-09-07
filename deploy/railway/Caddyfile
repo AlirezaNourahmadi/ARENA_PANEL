@@ -1,0 +1,20 @@
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT:8080} {
+	encode zstd gzip
+
+	respond /healthz 200
+
+	@gateway path /edge/*
+	reverse_proxy @gateway {$ARENA_GATEWAY_UPSTREAM:gateway.railway.internal:8081} {
+		header_up X-Arena-Client-IP {http.request.header.X-Real-IP}
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+	}
+
+	reverse_proxy {$ARENA_APP_UPSTREAM:arena.railway.internal:8000} {
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+	}
+}

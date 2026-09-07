@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     env: str = "development"
     public_url: str = "auto"
     database_url: str = "sqlite:///./arena.db"
+    database_connect_retries: int = Field(default=30, ge=1, le=120)
+    database_retry_seconds: float = Field(default=2, ge=0.1, le=30)
     app_secret: str = "development-only-change-this-secret"
     gateway_secret: str = "development-only-gateway-secret"
     admin_username: str = "admin"
@@ -40,6 +42,16 @@ class Settings(BaseSettings):
     def strip_public_url(cls, value: str) -> str:
         value = value.strip()
         return value if value.lower() == "auto" else value.rstrip("/")
+
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        value = value.strip()
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+psycopg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+psycopg://", 1)
+        return value
 
     @field_validator("gateway_public_path")
     @classmethod
