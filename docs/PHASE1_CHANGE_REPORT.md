@@ -9,6 +9,7 @@
 - نودهای پیش‌فرض VLESS/VMess به حالت adaptive منتقل شدند؛ آدرس، پورت، TLS، SNI و WebSocket Host از دامنه deployment تولید می‌شود.
 - برای نود Xray امکان خاموش‌کردن حالت adaptive و ثبت endpoint ثابت در پنل حفظ شده است.
 - سناریوی forwarded host/proto به تست‌های API اضافه شد تا بازگشت ناخواسته localhost شناسایی شود.
+- false positive ابزار GitGuardian در اسکریپت acceptance حذف و نبود credentialهای محلی در کل تاریخچه Git کنترل شد.
 
 ## هدف
 

@@ -14,6 +14,12 @@
 - اجرای کانتینر برنامه و Gateway با کاربر غیر root.
 - حذف compression در WebSocket برای کاهش پیچیدگی و رفتار ناهمسان کلاینت‌ها.
 - `Cache-Control: no-store` برای subscription.
+- فایل `.env` در Git نادیده گرفته می‌شود و فقط `.env.example` با placeholderها نگهداری می‌شود.
+- اسکریپت acceptance هیچ credential پیش‌فرضی ندارد و در نبود متغیر محیطی با خطا متوقف می‌شود.
+
+## Secret scanning
+
+عبارت اعتبارسنجی credential در نسخه اولیه اسکریپت acceptance به‌صورت `${variable:?message}` نوشته شده بود و توسط GitGuardian به‌اشتباه Password تشخیص داده شد. این عبارت بدون تغییر رفتار امنیتی با شرط صریح خالی‌بودن بازنویسی شد. تاریخچه repository برای مقادیر واقعی `ARENA_APP_SECRET`، `ARENA_GATEWAY_SECRET` و `ARENA_ADMIN_PASSWORD` کنترل شده و هیچ‌یک در Git وجود ندارند؛ incident مربوطه false positive است.
 
 ## چک‌لیست production
 

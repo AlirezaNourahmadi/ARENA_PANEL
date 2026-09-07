@@ -10,7 +10,10 @@ fi
 base_url="${ARENA_ACCEPTANCE_URL:-http://localhost:8080}"
 admin_user="${ARENA_ACCEPTANCE_USER:-${ARENA_ADMIN_USERNAME:-admin}}"
 admin_password="${ARENA_ACCEPTANCE_PASSWORD:-${ARENA_ADMIN_PASSWORD:-}}"
-: "${admin_password:?Set ARENA_ADMIN_PASSWORD or ARENA_ACCEPTANCE_PASSWORD}"
+if [[ -z "$admin_password" ]]; then
+  echo "Acceptance credentials are not configured." >&2
+  exit 1
+fi
 runtime_dir="${TMPDIR:-/tmp}/arena-acceptance-$$"
 mkdir -p "$runtime_dir"
 
