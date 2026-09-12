@@ -1,0 +1,16 @@
+{
+	admin off
+}
+
+{$ARENA_SITE_ADDRESS} {
+	encode zstd gzip
+
+	respond /healthz 200
+
+	@gateway path /edge/*
+	reverse_proxy @gateway gateway:8081 {
+		header_up X-Arena-Client-IP {remote_host}
+	}
+
+	reverse_proxy arena:8000
+}

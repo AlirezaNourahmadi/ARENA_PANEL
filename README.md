@@ -49,6 +49,7 @@ http://localhost:8080/login
 - [معماری](docs/ARCHITECTURE.md)
 - [فلوهای اپلیکیشن](docs/FLOWS.md)
 - [استقرار و عملیات](docs/DEPLOYMENT.md)
+- [استقرار روی Hostinger VPS](docs/HOSTINGER.md)
 - [امنیت](docs/SECURITY.md)
 - [گزارش کامل تغییرات فاز ۱](docs/PHASE1_CHANGE_REPORT.md)
 

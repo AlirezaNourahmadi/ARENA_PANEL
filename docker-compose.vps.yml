@@ -1,0 +1,96 @@
+name: arena
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: arena
+      POSTGRES_USER: arena
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - arena-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arena -d arena"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    logging: *default-logging
+
+  arena:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      ARENA_DATABASE_URL: postgresql+psycopg://arena:${POSTGRES_PASSWORD}@postgres:5432/arena
+      ARENA_PUBLIC_URL: auto
+      ARENA_XRAY_INTERNAL_HOST: arena
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8000"
+      - "11000"
+      - "11001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  gateway:
+    build:
+      context: gateway
+      dockerfile: Dockerfile
+    environment:
+      ARENA_API_URL: http://arena:8000
+      ARENA_GATEWAY_SECRET: ${ARENA_GATEWAY_SECRET:?ARENA_GATEWAY_SECRET is required}
+      ARENA_GATEWAY_LISTEN: :8081
+      ARENA_TRUST_PROXY_HEADERS: "true"
+      ARENA_TRUSTED_PROXY_HOPS: "1"
+      ARENA_TRUST_CLOUDFLARE_HEADER: "false"
+    depends_on:
+      arena:
+        condition: service_healthy
+    expose:
+      - "8081"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.10-alpine
+    environment:
+      ARENA_SITE_ADDRESS: ${ARENA_SITE_ADDRESS:?ARENA_SITE_ADDRESS is required}
+    depends_on:
+      arena:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile.vps:/etc/caddy/Caddyfile:ro
+      - arena-caddy-data:/data
+      - arena-caddy-config:/config
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  arena-postgres:
+  arena-caddy-data:
+  arena-caddy-config:

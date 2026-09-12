@@ -11,6 +11,17 @@
 - سناریوی forwarded host/proto به تست‌های API اضافه شد تا بازگشت ناخواسته localhost شناسایی شود.
 - false positive ابزار GitGuardian در اسکریپت acceptance حذف و نبود credentialهای محلی در کل تاریخچه Git کنترل شد.
 
+## شاخه و استقرار Hostinger
+
+- تغییرات اختصاصی VPS در شاخه `hostinger` نگهداری می‌شوند و شاخه `main` بدون تنظیمات میزبان باقی می‌ماند.
+- Compose تولید با PostgreSQL، ARENA، Gateway، Xray و Caddy در `docker-compose.vps.yml` تعریف شده است.
+- فقط پورت‌های `80` و `443` از Caddy منتشر می‌شوند؛ دیتابیس و سرویس‌های داخلی از اینترنت قابل دسترسی نیستند.
+- state برنامه در volume نام‌دار PostgreSQL و گواهی‌های Caddy در volumeهای مستقل نگهداری می‌شوند.
+- فایل `.env` روی VPS و خارج از Git ساخته می‌شود؛ مخزن فقط `.env.vps.example` بدون secret را دارد.
+- اجرای اولیه با IP و HTTP ممکن است. پس از تنظیم DNS، Caddy با قرارگرفتن دامنه در `ARENA_SITE_ADDRESS` گواهی TLS را خودکار صادر و تمدید می‌کند.
+- `ARENA_PUBLIC_URL=auto` باعث می‌شود لینک Subscription، آدرس نود، پورت، TLS، SNI و WebSocket Host از origin عمومی درخواست ساخته شوند و به localhost وابسته نباشند.
+- راهنمای نصب، فایروال، اتصال دامنه، کنترل سلامت و نگهداری در `docs/HOSTINGER.md` ثبت شده است.
+
 ## هدف
 
 ساخت یک ریپازیتوری مستقل برای پنل ARENA بدون تغییر پروژه قبلی Railway/Northflank. هیچ سرویس پولی، volume ابری یا دیتابیس مدیریت‌شده خریداری یا ایجاد نشده است.
@@ -102,12 +113,12 @@ Xray config validation: passed
 - محدودیت سرعت در یک Gateway دقیق است. حالت چند replica به Redis نیاز دارد.
 - MFA و RBAC چندمدیره هنوز وجود ندارد.
 - WebSocket و VMess در Xray 26.3.27 deprecated اعلام شده‌اند؛ پشتیبانی فعلی برای سازگاری محصول است.
-- استقرار ابری انجام نشده و هزینه‌ای ایجاد نشده است.
-- ریپازیتوری فعلاً محلی است؛ ساخت remote باید با حساب GitHub مالک پروژه انجام شود.
+- تا پیش از اجرای سناریوی پذیرش روی VPS، نتیجه‌ی استقرار production تأییدشده محسوب نمی‌شود.
+- مخزن خصوصی GitHub با نام `ARENA_PANEL` ایجاد شده و شاخه‌های محیطی مستقل نگهداری می‌شوند.
 
 ## سناریوی تست پذیرش کاربر
 
-1. `http://localhost:8080/login` را باز کنید.
+1. آدرس `/login` روی origin همان محیط را باز کنید؛ برای نمونه `http://localhost:8080/login` در توسعه یا `https://panel.example.com/login` در production.
 2. در کاربران، یک کاربر با حجم کم، ۷ روز، ۱ IP و هر دو نود بسازید.
 3. «لینک‌ها» را باز و Subscription را در Hiddify/NekoBox/V2Box وارد کنید.
 4. ابتدا یک سایت HTTPS و سپس DNS را آزمایش کنید.
