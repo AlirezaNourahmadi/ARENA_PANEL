@@ -10,15 +10,26 @@ fi
 base_url="${ARENA_ACCEPTANCE_URL:-http://localhost:8080}"
 admin_user="${ARENA_ACCEPTANCE_USER:-${ARENA_ADMIN_USERNAME:-admin}}"
 admin_password="${ARENA_ACCEPTANCE_PASSWORD:-${ARENA_ADMIN_PASSWORD:-}}"
+compose_file="${ARENA_ACCEPTANCE_COMPOSE_FILE:-docker-compose.yml}"
+docker_network="${ARENA_ACCEPTANCE_DOCKER_NETWORK:-arena_default}"
+proxy_address="${ARENA_ACCEPTANCE_PROXY_ADDRESS:-caddy}"
+proxy_port="${ARENA_ACCEPTANCE_PROXY_PORT:-80}"
+proxy_security="${ARENA_ACCEPTANCE_PROXY_SECURITY:-none}"
+proxy_ws_host="${ARENA_ACCEPTANCE_WS_HOST:-localhost}"
+proxy_server_name="${ARENA_ACCEPTANCE_SERVER_NAME:-$proxy_ws_host}"
 if [[ -z "$admin_password" ]]; then
   echo "Acceptance credentials are not configured." >&2
+  exit 1
+fi
+if [[ "$proxy_security" != "none" && "$proxy_security" != "tls" ]]; then
+  echo "ARENA_ACCEPTANCE_PROXY_SECURITY must be none or tls." >&2
   exit 1
 fi
 runtime_dir="${TMPDIR:-/tmp}/arena-acceptance-$$"
 mkdir -p "$runtime_dir"
 
 xray_pid() {
-  docker compose exec -T arena sh -lc \
+  docker compose -f "$compose_file" exec -T arena sh -lc \
     'for path in /proc/[0-9]*; do read -r name < "$path/comm" || continue; [ "$name" = xray ] && basename "$path"; done; exit 0'
 }
 
@@ -72,7 +83,10 @@ trap cleanup EXIT
 make_client_config() {
   local protocol="$1" id="$2" node="$3" output="$4"
   local path="/edge/$node/$user_id"
-  jq -n --arg protocol "$protocol" --arg id "$id" --arg path "$path" '{
+  jq -n --arg protocol "$protocol" --arg id "$id" --arg path "$path" \
+    --arg address "$proxy_address" --argjson port "$proxy_port" \
+    --arg transport_security "$proxy_security" --arg ws_host "$proxy_ws_host" \
+    --arg server_name "$proxy_server_name" '{
     log:{loglevel:"warning"},
     inbounds:[
       {listen:"0.0.0.0",port:18180,protocol:"socks",settings:{udp:true}},
@@ -80,8 +94,9 @@ make_client_config() {
     ],
     outbounds:[{
       protocol:$protocol,
-      settings:{vnext:[{address:"caddy",port:80,users:[{id:$id,encryption:(if $protocol == "vless" then "none" else null end),alterId:(if $protocol == "vmess" then 0 else null end),security:(if $protocol == "vmess" then "auto" else null end)}]}]},
-      streamSettings:{network:"ws",security:"none",wsSettings:{path:$path,host:"localhost"}}
+      settings:{vnext:[{address:$address,port:$port,users:[{id:$id,encryption:(if $protocol == "vless" then "none" else null end),alterId:(if $protocol == "vmess" then 0 else null end),security:(if $protocol == "vmess" then "auto" else null end)}]}]},
+      streamSettings:({network:"ws",security:$transport_security,wsSettings:{path:$path,host:$ws_host}} +
+        (if $transport_security == "tls" then {tlsSettings:{serverName:$server_name,allowInsecure:false,alpn:["http/1.1"]}} else {} end))
     }]
   } | walk(if type == "object" then with_entries(select(.value != null)) else . end)' > "$output"
 }
@@ -91,12 +106,12 @@ run_client() {
   local container="arena-acceptance-${protocol}-$$"
   docker run --rm -v "$config:/etc/xray/config.json:ro" \
     ghcr.io/xtls/xray-core:26.3.27 run -test -c /etc/xray/config.json >/dev/null
-  docker run --rm -d --name "$container" --network arena_default \
+  docker run --rm -d --name "$container" --network "$docker_network" \
     -v "$config:/etc/xray/config.json:ro" \
     ghcr.io/xtls/xray-core:26.3.27 run -c /etc/xray/config.json >/dev/null
   containers+=("$container")
   sleep 1
-  docker run --rm --network arena_default curlimages/curl:8.16.0 \
+  docker run --rm --network "$docker_network" curlimages/curl:8.16.0 \
     --max-time 15 --socks5-hostname "$container:18180" -sS -o /dev/null \
     -w '%{http_code}' "$url"
   docker stop "$container" >/dev/null
@@ -110,12 +125,12 @@ cloudflare_code=$(run_client vmess "$runtime_dir/vmess-client.json" https://cp.c
 
 # DNS/UDP is checked separately through the VLESS data plane.
 dns_container="arena-acceptance-dns-$$"
-docker run --rm -d --name "$dns_container" --network arena_default \
+docker run --rm -d --name "$dns_container" --network "$docker_network" \
   -v "$runtime_dir/vless-client.json:/etc/xray/config.json:ro" \
   ghcr.io/xtls/xray-core:26.3.27 run -c /etc/xray/config.json >/dev/null
 containers+=("$dns_container")
 sleep 1
-dns_answer=$(docker run --rm --network arena_default alpine:3.22 sh -c \
+dns_answer=$(docker run --rm --network "$docker_network" alpine:3.22 sh -c \
   "apk add --no-cache bind-tools >/dev/null && dig @$dns_container -p 18153 google.com A +short +time=5 +tries=1 | head -1")
 docker stop "$dns_container" >/dev/null
 containers=("${containers[@]/$dns_container}")

@@ -43,10 +43,16 @@ docker compose -f docker-compose.vps.yml ps
 برای پذیرش کامل دیتا‌پلین روی خود VPS، بعد از سالم‌شدن همه containerها اجرا کنید:
 
 ```bash
-ARENA_ACCEPTANCE_URL=http://localhost ./scripts/acceptance.sh
+ARENA_ACCEPTANCE_URL=https://panel.example.com \
+ARENA_ACCEPTANCE_COMPOSE_FILE=docker-compose.vps.yml \
+ARENA_ACCEPTANCE_PROXY_PORT=443 \
+ARENA_ACCEPTANCE_PROXY_SECURITY=tls \
+ARENA_ACCEPTANCE_WS_HOST=panel.example.com \
+ARENA_ACCEPTANCE_SERVER_NAME=panel.example.com \
+./scripts/acceptance.sh
 ```
 
-این سناریو یک کاربر موقت می‌سازد، VLESS، VMess و DNS را از مسیر عمومی Caddy/Gateway/Xray آزمایش می‌کند، ثابت‌ماندن PID هسته را کنترل می‌کند و کاربر موقت را حذف می‌کند.
+`panel.example.com` را با دامنه production جایگزین کنید. این سناریو یک کاربر موقت می‌سازد، VLESS، VMess و DNS را از مسیر TLS واقعی Caddy/Gateway/Xray آزمایش می‌کند، ثابت‌ماندن PID هسته را کنترل می‌کند و کاربر موقت را حذف می‌کند.
 
 ## اتصال دامنه و HTTPS
 
