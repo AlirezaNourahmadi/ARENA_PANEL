@@ -1,6 +1,6 @@
 # گزارش تحویل فاز ۱ ARENA
 
-تاریخ گزارش: ۱۴۰۵/۰۶/۱۶ (2026-09-07)
+تاریخ گزارش: ۱۴۰۵/۰۶/۲۲ (2026-09-13)
 
 ## به‌روزرسانی آدرس‌دهی عمومی
 
@@ -45,6 +45,9 @@
 - token bucket مشترک هر کاربر برای محدودیت سرعت.
 - کنترل IP واقعی با ingress header بازنویسی‌شده و محافظت در برابر spoofing.
 - outbound با `UseIPv4` برای رفتار پایدارتر در محیط‌های فاقد IPv6 سالم.
+- سقف خواندن هر پیام WebSocket در Gateway از پیش‌فرض ۳۲ کیلوبایت به ۱۶ مگابایت افزایش یافته است تا payloadهای بزرگ با `StatusMessageTooBig` بسته نشوند.
+- Gateway پیش از ثبت نهایی ترافیک منتظر پایان هر دو relay و heartbeat می‌ماند و خطاهای غیرعادی را با شناسه نشست لاگ می‌کند.
+- token bucket اکنون chunk بزرگ‌تر از نرخ یک‌ثانیه‌ای را مرحله‌ای مصرف می‌کند و در سرعت‌های پایین وارد انتظار بی‌نهایت نمی‌شود.
 
 ### Subscription و فرمت‌ها
 
@@ -82,10 +85,9 @@
 
 ```text
 health=ok
-google=204
-cloudflare=204
-dns=142.251.209.238
-xray_pid=15 dynamic_user_sync=ok
+google=204 cloudflare=204 dns=192.178.25.206
+payload=8388608/8388608 speed_Bps=38694269 seconds=0.216792
+xray_pid=13 dynamic_user_sync=ok
 cleanup=ok
 ```
 
@@ -95,11 +97,20 @@ cleanup=ok
 - درخواست Cloudflare از VMess عبور کرده است.
 - DNS/UDP از VLESS پاسخ گرفته است.
 - PID هسته هنگام ساخت کاربر ثابت مانده است.
+- payload هشت مگابایتی بدون کم‌شدن یا قطع اتصال از کل مسیر WebSocket عبور کرده است.
+
+## نتیجه عیب‌یابی دانلود VPS
+
+- همه کاربران production با `speed_limit_bps=0` بررسی شدند؛ محدودیت نرم‌افزاری روی دانلود فعال نبود.
+- سلامت VPS در زمان بررسی مناسب بود: حدود ۱۹٪ RAM و ۴ از ۵۰ گیگابایت دیسک مصرف شده بود و Gateway زیر بار نمونه حدود ۱٪ CPU داشت.
+- تست مستقیم ورودی سرور از Cloudflare حدود `425 Mbps` بود، اما خروجی TCP با `cubic` حدود `63 Mbps` اندازه‌گیری شد.
+- با بارگذاری `tcp_bbr` و تغییر qdisc به `fq`، دو تست خروجی بعدی حدود `467 Mbps` و `285 Mbps` ثبت کردند.
+- تنظیم BBR در فایل‌های versioned بخش `deploy/` نگهداری و با `scripts/tune-vps-network.sh` به‌صورت دائمی نصب می‌شود.
 
 آزمون‌های خودکار:
 
 ```text
-Python: 7 passed
+Python: 8 passed
 Go gateway/limiter: passed
 Frontend production build: passed
 Xray config validation: passed
@@ -113,7 +124,7 @@ Xray config validation: passed
 - محدودیت سرعت در یک Gateway دقیق است. حالت چند replica به Redis نیاز دارد.
 - MFA و RBAC چندمدیره هنوز وجود ندارد.
 - WebSocket و VMess در Xray 26.3.27 deprecated اعلام شده‌اند؛ پشتیبانی فعلی برای سازگاری محصول است.
-- تا پیش از اجرای سناریوی پذیرش روی VPS، نتیجه‌ی استقرار production تأییدشده محسوب نمی‌شود.
+- سرعت نهایی روی هر ISP به route بین کاربر و دیتاسنتر فرانکفورت وابسته است؛ benchmark سرور جای تست واقعی دستگاه کاربر را نمی‌گیرد.
 - مخزن خصوصی GitHub با نام `ARENA_PANEL` ایجاد شده و شاخه‌های محیطی مستقل نگهداری می‌شوند.
 
 ## سناریوی تست پذیرش کاربر

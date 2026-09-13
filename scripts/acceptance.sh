@@ -103,6 +103,7 @@ make_client_config() {
 
 run_client() {
   local protocol="$1" config="$2" url="$3"
+  local payload_url="${4:-}" expected_payload_bytes="${5:-}"
   local container="arena-acceptance-${protocol}-$$"
   docker run --rm -v "$config:/etc/xray/config.json:ro" \
     ghcr.io/xtls/xray-core:26.3.27 run -test -c /etc/xray/config.json >/dev/null
@@ -111,17 +112,52 @@ run_client() {
     ghcr.io/xtls/xray-core:26.3.27 run -c /etc/xray/config.json >/dev/null
   containers+=("$container")
   sleep 1
-  docker run --rm --network "$docker_network" curlimages/curl:8.16.0 \
+  client_status_code=$(docker run --rm --network "$docker_network" curlimages/curl:8.16.0 \
     --max-time 15 --socks5-hostname "$container:18180" -sS -o /dev/null \
-    -w '%{http_code}' "$url"
+    -w '%{http_code}' "$url") || {
+      docker stop "$container" >/dev/null 2>&1 || true
+      return 1
+    }
+  client_payload_bytes="0"
+  client_payload_speed="0"
+  client_payload_seconds="0"
+  if [[ -n "$payload_url" ]]; then
+    local payload_metrics
+    payload_metrics=$(docker run --rm --network "$docker_network" curlimages/curl:8.16.0 \
+      --max-time 30 --socks5-hostname "$container:18180" -sS -o /dev/null \
+      -w '%{size_download} %{speed_download} %{time_total}' "$payload_url") || {
+        docker stop "$container" >/dev/null 2>&1 || true
+        return 1
+      }
+    read -r client_payload_bytes client_payload_speed client_payload_seconds <<< "$payload_metrics"
+    if [[ "$client_payload_bytes" != "$expected_payload_bytes" ]]; then
+      echo "acceptance failed: received $client_payload_bytes of $expected_payload_bytes payload bytes" >&2
+      docker stop "$container" >/dev/null 2>&1 || true
+      return 1
+    fi
+  fi
   docker stop "$container" >/dev/null
   containers=("${containers[@]/$container}")
 }
 
 make_client_config vless "$vless_id" "$vless_node" "$runtime_dir/vless-client.json"
 make_client_config vmess "$vmess_id" "$vmess_node" "$runtime_dir/vmess-client.json"
-google_code=$(run_client vless "$runtime_dir/vless-client.json" https://www.google.com/generate_204)
-cloudflare_code=$(run_client vmess "$runtime_dir/vmess-client.json" https://cp.cloudflare.com/generate_204)
+payload_container="arena-acceptance-payload-$$"
+payload_bytes=$((8 * 1024 * 1024))
+docker run --rm -d --name "$payload_container" --network "$docker_network" caddy:2.10-alpine \
+  sh -c 'mkdir -p /www && dd if=/dev/zero of=/www/payload.bin bs=1M count=8 >/dev/null 2>&1 && caddy file-server --root /www --listen :18080' \
+  >/dev/null
+containers+=("$payload_container")
+sleep 1
+
+run_client vless "$runtime_dir/vless-client.json" \
+  https://www.google.com/generate_204 "http://$payload_container:18080/payload.bin" "$payload_bytes"
+google_code="$client_status_code"
+payload_downloaded="$client_payload_bytes"
+payload_speed="$client_payload_speed"
+payload_seconds="$client_payload_seconds"
+run_client vmess "$runtime_dir/vmess-client.json" https://cp.cloudflare.com/generate_204
+cloudflare_code="$client_status_code"
 
 # DNS/UDP is checked separately through the VLESS data plane.
 dns_container="arena-acceptance-dns-$$"
@@ -151,6 +187,7 @@ fi
 
 echo "health=$(jq -r '.status' "$runtime_dir/health.json")"
 echo "google=$google_code cloudflare=$cloudflare_code dns=$dns_answer"
+echo "payload=$payload_downloaded/$payload_bytes speed_Bps=$payload_speed seconds=$payload_seconds"
 echo "xray_pid=$xray_pid_after dynamic_user_sync=ok"
 echo "user=$user_id vless_node=$vless_node vmess_node=$vmess_node"
 echo "cleanup=ok"

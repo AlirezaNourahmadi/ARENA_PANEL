@@ -19,7 +19,7 @@ ARENA/Gateway -> PostgreSQL
 
 ```bash
 apt-get update
-apt-get install -y ca-certificates curl git
+apt-get install -y ca-certificates curl git jq
 curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
 ```
@@ -52,7 +52,33 @@ ARENA_ACCEPTANCE_SERVER_NAME=panel.example.com \
 ./scripts/acceptance.sh
 ```
 
-`panel.example.com` را با دامنه production جایگزین کنید. این سناریو یک کاربر موقت می‌سازد، VLESS، VMess و DNS را از مسیر TLS واقعی Caddy/Gateway/Xray آزمایش می‌کند، ثابت‌ماندن PID هسته را کنترل می‌کند و کاربر موقت را حذف می‌کند.
+`panel.example.com` را با دامنه production جایگزین کنید. این سناریو یک کاربر موقت می‌سازد، VLESS، VMess و DNS را از مسیر TLS واقعی Caddy/Gateway/Xray آزمایش می‌کند، یک payload هشت مگابایتی را کامل عبور می‌دهد، سرعت آن را گزارش می‌کند، ثابت‌ماندن PID هسته را کنترل می‌کند و کاربر موقت را حذف می‌کند.
+
+## بهینه‌سازی شبکه VPS
+
+برای مسیرهای با latency یا packet loss بالاتر، BBR همراه `fq` از افت شدید خروجی TCP جلوگیری می‌کند. تنظیم versioned پروژه را یک‌بار با دسترسی root اجرا کنید:
+
+```bash
+./scripts/tune-vps-network.sh
+```
+
+خروجی نهایی باید شامل این دو مقدار باشد:
+
+```text
+net.ipv4.tcp_congestion_control = bbr
+net.core.default_qdisc = fq
+```
+
+فایل‌های دائمی در `/etc/modules-load.d/arena-bbr.conf` و `/etc/sysctl.d/99-arena-network.conf` نصب می‌شوند و پس از reboot نیز اعمال خواهند شد.
+
+برای مقایسه مستقیم خروجی سرور می‌توان از یک upload کنترل‌شده استفاده کرد:
+
+```bash
+dd if=/dev/zero bs=1M count=50 2>/dev/null | \
+  curl -sS --max-time 30 -o /dev/null \
+  -w 'bytes=%{size_upload} seconds=%{time_total} speed_Bps=%{speed_upload}\n' \
+  -X POST --data-binary @- https://speed.cloudflare.com/__up
+```
 
 ## اتصال دامنه و HTTPS
 
@@ -98,5 +124,6 @@ docker compose -f docker-compose.vps.yml ps
 - قبل از ارتقا از PostgreSQL backup بگیرید.
 - فایل `.env` را با مجوز `600` نگه دارید.
 - برای Gateway در فاز ۱ فقط یک replica اجرا کنید.
+- بعد از تغییر kernel یا image سیستم، خروجی `scripts/tune-vps-network.sh` را دوباره کنترل کنید.
 
 برای دریافت نسخه جدید شاخه و بازسازی سرویس‌ها، ابتدا از دیتابیس backup بگیرید و سپس source را جایگزین کنید؛ فایل `.env` و volumeهای Docker نباید حذف شوند.

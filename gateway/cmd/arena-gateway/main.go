@@ -21,13 +21,14 @@ import (
 )
 
 type config struct {
-	listen            string
-	apiURL            string
-	secret            string
-	instance          string
-	trustProxyHeaders bool
-	trustedProxyHops  int
-	trustCloudflare   bool
+	listen             string
+	apiURL             string
+	secret             string
+	instance           string
+	websocketReadLimit int64
+	trustProxyHeaders  bool
+	trustedProxyHops   int
+	trustCloudflare    bool
 }
 
 type gateway struct {
@@ -71,13 +72,14 @@ type counters struct {
 
 func main() {
 	cfg := config{
-		listen:            env("ARENA_GATEWAY_LISTEN", ":8081"),
-		apiURL:            strings.TrimRight(env("ARENA_API_URL", "http://arena:8000"), "/"),
-		secret:            os.Getenv("ARENA_GATEWAY_SECRET"),
-		instance:          env("HOSTNAME", "arena-gateway"),
-		trustProxyHeaders: envBool("ARENA_TRUST_PROXY_HEADERS", true),
-		trustedProxyHops:  envInt("ARENA_TRUSTED_PROXY_HOPS", 1),
-		trustCloudflare:   envBool("ARENA_TRUST_CLOUDFLARE_HEADER", false),
+		listen:             env("ARENA_GATEWAY_LISTEN", ":8081"),
+		apiURL:             strings.TrimRight(env("ARENA_API_URL", "http://arena:8000"), "/"),
+		secret:             os.Getenv("ARENA_GATEWAY_SECRET"),
+		instance:           env("HOSTNAME", "arena-gateway"),
+		websocketReadLimit: envInt64("ARENA_GATEWAY_WS_READ_LIMIT_BYTES", 16*1024*1024),
+		trustProxyHeaders:  envBool("ARENA_TRUST_PROXY_HEADERS", true),
+		trustedProxyHops:   envInt("ARENA_TRUSTED_PROXY_HOPS", 1),
+		trustCloudflare:    envBool("ARENA_TRUST_CLOUDFLARE_HEADER", false),
 	}
 	if len(cfg.secret) < 16 {
 		log.Fatal("ARENA_GATEWAY_SECRET must be configured")
@@ -99,7 +101,7 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
-	log.Printf("ARENA gateway listening on %s", cfg.listen)
+	log.Printf("ARENA gateway listening on %s websocket_read_limit=%d", cfg.listen, cfg.websocketReadLimit)
 	log.Fatal(server.ListenAndServe())
 }
 
@@ -150,16 +152,27 @@ func (g *gateway) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if heartbeat < 5 {
 		heartbeat = 15
 	}
-	go g.heartbeatLoop(ctx, cancel, auth.SessionID, bucket, counts, time.Duration(heartbeat)*time.Second)
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		g.heartbeatLoop(ctx, cancel, auth.SessionID, bucket, counts, time.Duration(heartbeat)*time.Second)
+	}()
 
 	errCh := make(chan error, 2)
-	go func() { errCh <- relay(ctx, upstream, client, bucket, &counts.uplink) }()
-	go func() { errCh <- relay(ctx, client, upstream, bucket, &counts.downlink) }()
-	err = <-errCh
+	go func() { errCh <- relay(ctx, upstream, client, bucket, &counts.uplink, g.config.websocketReadLimit) }()
+	go func() { errCh <- relay(ctx, client, upstream, bucket, &counts.downlink, g.config.websocketReadLimit) }()
+	firstErr := <-errCh
 	cancel()
+	secondErr := <-errCh
+	<-heartbeatDone
+	err = firstErr
+	if expectedRelayClose(firstErr) && !expectedRelayClose(secondErr) {
+		err = secondErr
+	}
 	reason := "client_closed"
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if !expectedRelayClose(err) {
 		reason = "transport_closed"
+		log.Printf("session=%s user=%s node=%s relay stopped: %v", auth.SessionID, userID, nodeID, err)
 	}
 	g.closeSession(
 		context.Background(), auth.SessionID,
@@ -167,7 +180,16 @@ func (g *gateway) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func relay(ctx context.Context, dst, src *websocket.Conn, bucket *limiter.Bucket, counter *atomic.Int64) error {
+func expectedRelayClose(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return true
+	}
+	status := websocket.CloseStatus(err)
+	return status == websocket.StatusNormalClosure || status == websocket.StatusGoingAway
+}
+
+func relay(ctx context.Context, dst, src *websocket.Conn, bucket *limiter.Bucket, counter *atomic.Int64, readLimit int64) error {
+	src.SetReadLimit(readLimit)
 	buffer := make([]byte, 32*1024)
 	for {
 		messageType, reader, err := src.Reader(ctx)
@@ -337,6 +359,18 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 1 {
+		return fallback
+	}
+	return parsed
+}
+
+func envInt64(key string, fallback int64) int64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || parsed < 1 {
 		return fallback
 	}

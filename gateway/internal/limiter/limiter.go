@@ -34,7 +34,8 @@ func (b *Bucket) Wait(ctx context.Context, bytes int) error {
 	if bytes <= 0 {
 		return nil
 	}
-	for {
+	remaining := int64(bytes)
+	for remaining > 0 {
 		b.mu.Lock()
 		now := time.Now()
 		b.refill(now)
@@ -42,12 +43,17 @@ func (b *Bucket) Wait(ctx context.Context, bytes int) error {
 			b.mu.Unlock()
 			return nil
 		}
-		if b.tokens >= float64(bytes) {
-			b.tokens -= float64(bytes)
-			b.mu.Unlock()
-			return nil
+		request := remaining
+		if request > b.rate {
+			request = b.rate
 		}
-		missing := float64(bytes) - b.tokens
+		if b.tokens >= float64(request) {
+			b.tokens -= float64(request)
+			remaining -= request
+			b.mu.Unlock()
+			continue
+		}
+		missing := float64(request) - b.tokens
 		wait := time.Duration(missing / float64(b.rate) * float64(time.Second))
 		if wait < time.Millisecond {
 			wait = time.Millisecond
@@ -61,6 +67,7 @@ func (b *Bucket) Wait(ctx context.Context, bytes int) error {
 		case <-timer.C:
 		}
 	}
+	return nil
 }
 
 func (b *Bucket) refill(now time.Time) {
