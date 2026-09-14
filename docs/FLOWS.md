@@ -48,6 +48,17 @@
 - سرعت: یک token bucket مشترک برای همه اتصال‌های همان کاربر، uplink و downlink را محدود می‌کند.
 - غیرفعال‌سازی: Gateway اتصال جدید را رد می‌کند و Xray credential را پویا حذف می‌کند.
 
+## ۵.۱ اتصال REALITY
+
+1. Subscription برای Node نوع `VLESS / TCP / REALITY` لینک دارای `pbk`، `sid`، `sni` و flow رسمی Vision می‌سازد.
+2. اتصال مستقیماً به inbound عمومی Xray می‌رسد و به HTTP، Caddy و WebSocket وابسته نیست.
+3. StatsService حجم و IPهای آنلاین را هر ۱۵ ثانیه گزارش می‌کند.
+4. Control Plane مصرف، شروع اعتبار و نشست‌ها را در PostgreSQL ثبت می‌کند.
+5. RoutingService اتصال IPهای بیشتر از سقف کاربر را برای درخواست‌های بعدی به outbound مسدود هدایت می‌کند.
+6. پایان حجم، پایان اعتبار یا غیرفعال‌سازی باعث حذف پویا credential می‌شود.
+
+سرعت تنظیم‌شده کاربر روی مسیر REALITY اندازه‌گیری می‌شود اما shape نمی‌شود؛ token bucket فقط در Gateway WebSocket قرار دارد.
+
 ## ۶. ردیابی
 
 پنل دو نمای مستقل دارد:

@@ -35,10 +35,10 @@ class NodeCreate(BaseModel):
     slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,62}$")
     kind: Literal["xray", "wireguard", "cisco"] = "xray"
     protocol: Literal["vless", "vmess", "wireguard", "cisco"] = "vless"
-    transport: Literal["websocket", "external"] = "websocket"
+    transport: Literal["websocket", "tcp", "external"] = "websocket"
     host: str = Field(min_length=1, max_length=255)
     port: int = Field(default=443, ge=1, le=65535)
-    security: Literal["tls", "none"] = "tls"
+    security: Literal["tls", "reality", "none"] = "tls"
     sni: str = Field(default="", max_length=255)
     websocket_host: str = Field(default="", max_length=255)
     path: str = Field(default="/edge", max_length=255)
@@ -60,7 +60,7 @@ class NodeUpdate(BaseModel):
     enabled: bool | None = None
     host: str | None = Field(default=None, min_length=1, max_length=255)
     port: int | None = Field(default=None, ge=1, le=65535)
-    security: Literal["tls", "none"] | None = None
+    security: Literal["tls", "reality", "none"] | None = None
     sni: str | None = Field(default=None, max_length=255)
     websocket_host: str | None = Field(default=None, max_length=255)
     path: str | None = Field(default=None, max_length=255)

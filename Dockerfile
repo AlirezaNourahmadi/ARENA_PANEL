@@ -23,5 +23,5 @@ RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin arena \
     && mkdir -p /tmp/arena-xray \
     && chown -R arena:arena /app /tmp/arena-xray
 USER arena
-EXPOSE 8000 11000 11001
+EXPOSE 8000 11000 11001 12000
 CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

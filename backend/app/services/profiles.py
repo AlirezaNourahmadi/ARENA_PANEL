@@ -53,6 +53,14 @@ def _proxy_endpoint(node: Node, base_url: str | None) -> ProxyEndpoint:
     adaptive = metadata.get("adaptive_endpoint", False) or node.host.lower() == "auto"
     if adaptive and base_url:
         origin = public_endpoint(base_url)
+        if node.transport == "tcp" and node.security == "reality":
+            return ProxyEndpoint(
+                host=origin.host,
+                port=node.port,
+                security="reality",
+                sni=node.sni,
+                websocket_host="",
+            )
         return ProxyEndpoint(
             host=origin.host,
             port=origin.port,
@@ -75,17 +83,32 @@ def vless_uri(
     user: User, node: Node, key: AccessKey, base_url: str | None = None
 ) -> str:
     endpoint = _proxy_endpoint(node, base_url)
-    params = {
-        "encryption": "none",
-        "security": endpoint.security,
-        "type": "ws",
-        "host": endpoint.websocket_host,
-        "path": public_ws_path(node, user),
-        "fp": node.fingerprint,
-        "alpn": node.alpn,
-    }
-    if endpoint.security == "tls":
-        params["sni"] = endpoint.sni
+    metadata = json.loads(node.metadata_json or "{}")
+    if node.transport == "tcp" and endpoint.security == "reality":
+        params = {
+            "encryption": "none",
+            "security": "reality",
+            "type": "tcp",
+            "sni": endpoint.sni,
+            "fp": node.fingerprint,
+            "pbk": metadata.get("public_key", ""),
+            "sid": metadata.get("short_id", ""),
+            "spx": metadata.get("spider_x", "/"),
+            "flow": metadata.get("flow", "xtls-rprx-vision"),
+            "headerType": "none",
+        }
+    else:
+        params = {
+            "encryption": "none",
+            "security": endpoint.security,
+            "type": "ws",
+            "host": endpoint.websocket_host,
+            "path": public_ws_path(node, user),
+            "fp": node.fingerprint,
+            "alpn": node.alpn,
+        }
+        if endpoint.security == "tls":
+            params["sni"] = endpoint.sni
     label = quote(f"ARENA - {user.name} - {node.name}", safe="")
     uri_host = (
         f"[{endpoint.host}]"

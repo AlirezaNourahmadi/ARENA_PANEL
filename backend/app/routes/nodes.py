@@ -19,8 +19,17 @@ router = APIRouter(prefix="/api/nodes", tags=["nodes"])
 def _validate_node(payload: NodeCreate) -> None:
     if payload.kind == "xray" and payload.protocol not in {"vless", "vmess"}:
         raise HTTPException(status_code=422, detail="نود Xray باید VLESS یا VMess باشد")
-    if payload.kind == "xray" and payload.transport != "websocket":
-        raise HTTPException(status_code=422, detail="در فاز ۱ ترابرد فعال Xray فقط WebSocket است")
+    if payload.kind == "xray" and payload.transport not in {"websocket", "tcp"}:
+        raise HTTPException(status_code=422, detail="ترابرد Xray باید WebSocket یا TCP باشد")
+    if payload.kind == "xray" and payload.transport == "tcp":
+        if payload.protocol != "vless" or payload.security != "reality":
+            raise HTTPException(status_code=422, detail="TCP مستقیم فقط برای VLESS REALITY پشتیبانی می‌شود")
+        public_key = str(payload.metadata.get("public_key", ""))
+        short_id = str(payload.metadata.get("short_id", ""))
+        if not payload.sni or not public_key or not short_id:
+            raise HTTPException(status_code=422, detail="REALITY به SNI، public key و short ID نیاز دارد")
+    if payload.kind == "xray" and payload.transport == "websocket" and payload.security == "reality":
+        raise HTTPException(status_code=422, detail="امنیت REALITY فقط با TCP قابل استفاده است")
     if payload.kind == "wireguard" and payload.protocol != "wireguard":
         raise HTTPException(status_code=422, detail="نوع و پروتکل WireGuard هم‌خوان نیست")
     if payload.kind == "cisco" and payload.protocol != "cisco":
@@ -92,6 +101,8 @@ async def update_node(
         values["path"] = "/" + values["path"].strip("/")
     for key, value in values.items():
         setattr(node, key, value.strip() if isinstance(value, str) else value)
+    if node.kind == "xray" and node.transport == "tcp" and node.security != "reality":
+        raise HTTPException(status_code=422, detail="نود TCP باید از REALITY استفاده کند")
     audit(db, "node.updated", actor=admin.username, entity_type="node", entity_id=node.id, detail={"fields": sorted(payload.model_fields_set)})
     db.commit()
     await xray_runtime.reconcile(db)

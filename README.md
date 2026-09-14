@@ -8,9 +8,11 @@ ARENA یک پنل مستقل مدیریت دسترسی پراکسی است. فا
 |---|---|
 | VLESS + WebSocket | فعال و تست‌شده با Xray Core |
 | VMess + WebSocket | فعال و تست‌شده با Xray Core |
+| VLESS + TCP + REALITY | مسیر مستقیم اختیاری برای شبکه‌های مختل‌کننده TLS/WS |
 | لینک Subscription و Hiddify | فعال |
 | کانفیگ وضعیت مصرف در ابتدای Subscription | فعال و عمداً غیرقابل اتصال |
-| محدودیت حجم، روز، IP همزمان و سرعت | فعال |
+| محدودیت حجم، روز و IP همزمان | فعال روی Gateway و REALITY |
+| محدودیت سرعت | فعال روی مسیر WebSocket/Gateway؛ در REALITY فقط اندازه‌گیری می‌شود |
 | نشست‌ها و Audit log | فعال |
 | WireGuard | تولید پروفایل برای سرور خارجی |
 | Cisco/OpenConnect | تولید XML و اعتبارنامه برای سرور خارجی |
@@ -42,7 +44,7 @@ http://localhost:8080/login
 ./scripts/acceptance.sh
 ```
 
-این آزمون یک کاربر واقعی می‌سازد، ثابت‌ماندن پردازش Xray هنگام افزودن کاربر را کنترل می‌کند، سپس VLESS، VMess، DNS/UDP و انتقال کامل یک payload هشت مگابایتی را از داخل کانتینرهای Xray client آزمایش می‌کند.
+این آزمون یک کاربر واقعی می‌سازد، ثابت‌ماندن پردازش Xray هنگام افزودن کاربر را کنترل می‌کند، سپس VLESS، VMess، DNS/UDP و انتقال کامل یک payload هشت مگابایتی را از داخل کانتینرهای Xray client آزمایش می‌کند. استقرارهایی که REALITY را فعال کرده‌اند آزمون جداگانه `scripts/reality-acceptance.sh` را نیز اجرا می‌کنند.
 
 ## مستندات
 
@@ -50,6 +52,7 @@ http://localhost:8080/login
 - [فلوهای اپلیکیشن](docs/FLOWS.md)
 - [استقرار و عملیات](docs/DEPLOYMENT.md)
 - [استقرار روی Hostinger VPS](docs/HOSTINGER.md)
+- [گزارش قطعی Hostinger و راهکار REALITY](docs/HOSTINGER_OUTAGE_2026-09-14.md)
 - [امنیت](docs/SECURITY.md)
 - [گزارش کامل تغییرات فاز ۱](docs/PHASE1_CHANGE_REPORT.md)
 

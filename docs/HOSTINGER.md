@@ -10,10 +10,11 @@ Internet :80/:443/:8443
      -> /edge/* -> Gateway :8081
      -> other   -> ARENA :8000
 Gateway -> Xray :11000/:11001
+Internet :2053/TCP -> Xray VLESS/REALITY :12000
 ARENA/Gateway -> PostgreSQL
 ```
 
-تنها Caddy پورت عمومی دارد. پورت `8443` همان TLS listener را به‌عنوان مسیر پشتیبان منتشر می‌کند و با `ARENA_FALLBACK_TLS_PORT` قابل تغییر است. PostgreSQL، Gateway، پنل و inboundهای Xray داخل شبکه Docker باقی می‌مانند.
+Caddy پورت‌های پنل و WebSocket را منتشر می‌کند. پورت `8443` همان TLS listener را به‌عنوان مسیر پشتیبان منتشر می‌کند و پورت `2053/TCP` مستقیماً به inbound اختیاری REALITY متصل است. PostgreSQL و API داخلی Xray منتشر نمی‌شوند.
 
 ## نصب اولیه
 
@@ -24,7 +25,7 @@ curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
 ```
 
-سورس شاخه `hostinger` را در `/opt/arena` قرار دهید و `.env.vps.example` را به `.env` تبدیل کنید. همه placeholderها باید با مقادیر تصادفی مستقل تعویض شوند.
+سورس شاخه `hostinger-reality` را در `/opt/arena` قرار دهید و `.env.vps.example` را به `.env` تبدیل کنید. همه placeholderها باید با مقادیر تصادفی مستقل تعویض شوند. شاخه `hostinger` نسخه پیش از REALITY را بدون تغییر نگه می‌دارد.
 
 برای اجرای اولیه با IP:
 
@@ -53,6 +54,13 @@ ARENA_ACCEPTANCE_SERVER_NAME=panel.example.com \
 ```
 
 `panel.example.com` را با دامنه production جایگزین کنید. این سناریو یک کاربر موقت می‌سازد، VLESS، VMess و DNS را از مسیر TLS واقعی Caddy/Gateway/Xray آزمایش می‌کند، یک payload هشت مگابایتی را کامل عبور می‌دهد، سرعت آن را گزارش می‌کند، ثابت‌ماندن PID هسته را کنترل می‌کند و کاربر موقت را حذف می‌کند.
+
+برای آزمون REALITY و حسابداری آن:
+
+```bash
+ARENA_ACCEPTANCE_URL=https://panel.example.com \
+./scripts/reality-acceptance.sh
+```
 
 ## بهینه‌سازی شبکه VPS
 
@@ -105,6 +113,7 @@ ufw allow 80/tcp
 ufw allow 443/tcp
 ufw allow 443/udp
 ufw allow 8443/tcp
+ufw allow 2053/tcp
 ufw --force enable
 ```
 
@@ -118,6 +127,19 @@ ARENA_FALLBACK_TLS_PORT=8443
 ```
 
 Node پشتیبان همچنان از Caddy، Gateway و Xray عبور می‌کند؛ بنابراین محدودیت حجم، IP، سرعت و ثبت نشست‌ها دور زده نمی‌شود. دامنه اصلی و پورت `443` نیز فعال می‌مانند.
+
+## مسیر REALITY
+
+REALITY برای زمانی است که TCP برقرار می‌شود اما TLS/HTTP/WebSocket روی مسیر ISP reset یا متوقف می‌شود. یک جفت X25519 و short ID بسازید و فقط private key را محرمانه نگه دارید:
+
+```bash
+docker run --rm --entrypoint /usr/local/bin/xray ghcr.io/xtls/xray-core:26.3.27 x25519
+openssl rand -hex 8
+```
+
+مقادیر متناظر را در `.env` مطابق `.env.vps.example` قرار دهید. `ARENA_XRAY_REALITY_TARGET` و `ARENA_XRAY_REALITY_SERVER_NAME` باید یک مقصد TLS 1.3 آزموده‌شده باشند. در استقرار فعلی `www.google.com:443` انتخاب شده، چون handshake واقعی آن روی VPS کامل می‌شود. با فعال‌شدن این قابلیت، Node به نام `ARENA Reality` ساخته و یک‌بار به کاربران موجود اضافه می‌شود؛ کاربران جدید نیز آن را مانند Nodeهای فعال دیگر دریافت می‌کنند.
+
+حجم، روز و IPهای همزمان از API خود Xray ثبت و اعمال می‌شوند. shaping سرعت همچنان فقط روی مسیر WebSocket/Gateway انجام می‌شود.
 
 ## کنترل سلامت
 

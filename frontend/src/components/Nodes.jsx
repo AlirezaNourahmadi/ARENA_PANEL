@@ -26,9 +26,9 @@ function NodeForm({ initial = defaults, editing = false, onSubmit }) {
     setForm((f) => ({
       ...f,
       host: enabled ? 'auto' : (f.host === 'auto' ? '' : f.host),
-      port: enabled ? 443 : f.port,
-      security: enabled ? 'tls' : f.security,
-      sni: enabled ? '' : f.sni,
+      port: enabled ? (f.transport === 'tcp' ? 2053 : 443) : f.port,
+      security: enabled ? (f.transport === 'tcp' ? 'reality' : 'tls') : f.security,
+      sni: enabled && f.transport !== 'tcp' ? '' : f.sni,
       websocket_host: enabled ? 'auto' : (f.websocket_host === 'auto' ? '' : f.websocket_host),
       metadata: { ...f.metadata, adaptive_endpoint: enabled },
     }))
@@ -40,6 +40,7 @@ function NodeForm({ initial = defaults, editing = false, onSubmit }) {
   }
 
   const xray = form.kind === 'xray'
+  const reality = xray && form.transport === 'tcp' && form.security === 'reality'
   const adaptive = xray && Boolean(form.metadata?.adaptive_endpoint)
   return <form className="form-grid" onSubmit={submit}>
     <label><span>نام نمایشی</span><input value={form.name} onChange={(e) => set('name', e.target.value)} required /></label>
@@ -51,10 +52,10 @@ function NodeForm({ initial = defaults, editing = false, onSubmit }) {
     <label><span>آدرس عمومی</span><input dir="ltr" value={form.host} onChange={(e) => set('host', e.target.value)} required disabled={adaptive} /></label>
     <label><span>پورت</span><input type="number" min="1" max="65535" value={form.port} onChange={(e) => set('port', Number(e.target.value))} disabled={adaptive} /></label>
     {xray && <>
-      <label><span>امنیت</span><select value={form.security} onChange={(e) => set('security', e.target.value)} disabled={adaptive}><option value="tls">TLS</option><option value="none">None</option></select></label>
+      <label><span>امنیت</span><select value={form.security} onChange={(e) => set('security', e.target.value)} disabled={adaptive}><option value="tls">TLS</option><option value="reality">REALITY</option><option value="none">None</option></select></label>
       <label><span>SNI</span><input dir="ltr" value={form.sni} onChange={(e) => set('sni', e.target.value)} disabled={adaptive} /></label>
-      <label><span>WebSocket Host</span><input dir="ltr" value={form.websocket_host} onChange={(e) => set('websocket_host', e.target.value)} disabled={adaptive} /></label>
-      <label><span>Path پایه</span><input dir="ltr" value={form.path} onChange={(e) => set('path', e.target.value)} /></label>
+      {!reality && <label><span>WebSocket Host</span><input dir="ltr" value={form.websocket_host} onChange={(e) => set('websocket_host', e.target.value)} disabled={adaptive} /></label>}
+      {!reality && <label><span>Path پایه</span><input dir="ltr" value={form.path} onChange={(e) => set('path', e.target.value)} /></label>}
       <label><span>Fingerprint</span><select value={form.fingerprint} onChange={(e) => set('fingerprint', e.target.value)}>{['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random', 'randomized'].map((item) => <option key={item}>{item}</option>)}</select></label>
       <fieldset className="alpn-field"><legend>ALPN</legend>{['http/1.1', 'h2', 'h3'].map((item) => <label className="check-row compact" key={item}><input type="checkbox" checked={form.alpn.includes(item)} onChange={(e) => set('alpn', e.target.checked ? [...form.alpn, item] : form.alpn.filter((value) => value !== item))} /><span>{item}</span></label>)}</fieldset>
     </>}
@@ -84,7 +85,7 @@ export default function Nodes({ nodes, reload, notify }) {
         <header><div className={`protocol-mark protocol-${node.protocol}`}><Server size={21} /></div><div><strong>{node.name}</strong><span>{node.slug}</span></div><span className={`status-pill ${node.enabled ? 'ok' : 'off'}`}>{node.enabled ? 'فعال' : 'خاموش'}</span></header>
         <div className="node-address"><Globe2 size={17} /><strong dir={node.metadata?.adaptive_endpoint ? 'rtl' : 'ltr'}>{node.metadata?.adaptive_endpoint ? 'دامنه پنل (خودکار)' : `${node.host}:${node.port}`}</strong></div>
         <dl className="node-specs">
-          <div><dt><Route size={15} />پروتکل</dt><dd>{node.protocol.toUpperCase()} / {node.transport === 'websocket' ? 'WS' : 'External'}</dd></div>
+          <div><dt><Route size={15} />پروتکل</dt><dd>{node.protocol.toUpperCase()} / {node.transport === 'websocket' ? 'WS' : node.transport === 'tcp' ? 'TCP / REALITY' : 'External'}</dd></div>
           <div><dt><Fingerprint size={15} />Fingerprint</dt><dd>{node.fingerprint}</dd></div>
           <div><dt><Radio size={15} />ALPN</dt><dd>{node.alpn.join(', ') || 'none'}</dd></div>
         </dl>

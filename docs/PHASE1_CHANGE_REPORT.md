@@ -13,9 +13,9 @@
 
 ## شاخه و استقرار Hostinger
 
-- تغییرات اختصاصی VPS در شاخه `hostinger` نگهداری می‌شوند و شاخه `main` بدون تنظیمات میزبان باقی می‌ماند.
+- نسخه پایدار قبلی VPS در شاخه `hostinger` حفظ شده و مسیر بازیابی جدید در شاخه مستقل `hostinger-reality` نگهداری می‌شود؛ شاخه `main` بدون تنظیمات میزبان باقی می‌ماند.
 - Compose تولید با PostgreSQL، ARENA، Gateway، Xray و Caddy در `docker-compose.vps.yml` تعریف شده است.
-- فقط پورت‌های `80` و `443` از Caddy منتشر می‌شوند؛ دیتابیس و سرویس‌های داخلی از اینترنت قابل دسترسی نیستند.
+- پورت‌های `80`، `443` و `8443` از Caddy منتشر می‌شوند و مسیر مستقل VLESS/TCP/REALITY روی `2053/TCP` قرار دارد؛ دیتابیس، API هسته و inboundهای داخلی از اینترنت قابل دسترسی نیستند.
 - state برنامه در volume نام‌دار PostgreSQL و گواهی‌های Caddy در volumeهای مستقل نگهداری می‌شوند.
 - فایل `.env` روی VPS و خارج از Git ساخته می‌شود؛ مخزن فقط `.env.vps.example` بدون secret را دارد.
 - اجرای اولیه با IP و HTTP ممکن است. پس از تنظیم DNS، Caddy با قرارگرفتن دامنه در `ARENA_SITE_ADDRESS` گواهی TLS را خودکار صادر و تمدید می‌کند.
@@ -48,6 +48,10 @@
 - سقف خواندن هر پیام WebSocket در Gateway از پیش‌فرض ۳۲ کیلوبایت به ۱۶ مگابایت افزایش یافته است تا payloadهای بزرگ با `StatusMessageTooBig` بسته نشوند.
 - Gateway پیش از ثبت نهایی ترافیک منتظر پایان هر دو relay و heartbeat می‌ماند و خطاهای غیرعادی را با شناسه نشست لاگ می‌کند.
 - token bucket اکنون chunk بزرگ‌تر از نرخ یک‌ثانیه‌ای را مرحله‌ای مصرف می‌کند و در سرعت‌های پایین وارد انتظار بی‌نهایت نمی‌شود.
+- inbound اختیاری VLESS/TCP/REALITY با Vision بدون وابستگی به HTTP، TLS سایت یا WebSocket اضافه شده است.
+- افزودن و حذف کاربر REALITY با HandlerService و بدون restart هسته انجام می‌شود.
+- StatsService مصرف uplink/downlink، شروع اعتبار و IPهای آنلاین را به PostgreSQL منتقل می‌کند؛ RoutingService محدودیت IP همزمان را اعمال می‌کند.
+- کلید خصوصی REALITY فقط در `.env` VPS نگهداری می‌شود و هیچ‌گاه در API، دیتابیس، subscription یا Git قرار نمی‌گیرد.
 
 ### Subscription و فرمت‌ها
 
@@ -110,11 +114,21 @@ cleanup=ok
 آزمون‌های خودکار:
 
 ```text
-Python: 8 passed
+Python: 14 passed
 Go gateway/limiter: passed
 Frontend production build: passed
 Xray config validation: passed
+REALITY: Google 204, payload 20971520/20971520, accounting/session passed
 ```
+
+## قطعی ۱۴ سپتامبر و مسیر بازیابی
+
+- پنل و آزمون داخلی سالم بودند، اما TLS/HTTP/WebSocket روی اینترنت مستقیم کاربر پس از برقراری TCP reset یا متوقف می‌شدند؛ بنابراین مشکل از UUID، دیتابیس، `/data` یا تفاوت هسته کلاینت و سرور نبود.
+- packet capture روی VPS retransmit پاسخ TLS و نرسیدن ACKهای بعدی را نشان داد و بازه رخداد با نگهداری اعلام‌شده دیتاسنتر Hostinger هم‌پوشانی داشت.
+- مسیر VLESS/TCP/REALITY روی پورت مستقل `2053` با مقصد آزموده‌شده `www.google.com:443` اضافه شد و WebSocket موجود برای سازگاری حفظ شد.
+- تست مستقیم اینترنت کاربر HTTP 204 و payload هشت MiB را عبور داد؛ IP واقعی ورودی نیز در سمت VPS مشاهده شد.
+- اسکریپت `scripts/reality-acceptance.sh` یک کاربر موقت می‌سازد، لینک adaptive را به کانفیگ Xray تبدیل می‌کند، ۲۰ MiB داده عبور می‌دهد و ثبت مصرف/session را از API پنل کنترل می‌کند.
+- جزئیات packet-level و تصمیم معماری در `docs/HOSTINGER_OUTAGE_2026-09-14.md` ثبت شده است.
 
 رابط در اندازه دسکتاپ و موبایل با Browser Playwright بررسی شد. فرم ساخت کاربر، خروجی‌های Subscription و navigation اصلی نیز طی شدند.
 
@@ -122,6 +136,7 @@ Xray config validation: passed
 
 - WireGuard و Cisco/OpenConnect فقط پروفایل backend خارجی تولید می‌کنند؛ daemon سرور را provision نمی‌کنند.
 - محدودیت سرعت در یک Gateway دقیق است. حالت چند replica به Redis نیاز دارد.
+- مسیر REALITY حجم، روز و IP همزمان را اعمال می‌کند، اما محدودیت سرعت کاربرمحور فعلاً فقط روی WebSocket/Gateway فعال است.
 - MFA و RBAC چندمدیره هنوز وجود ندارد.
 - WebSocket و VMess در Xray 26.3.27 deprecated اعلام شده‌اند؛ پشتیبانی فعلی برای سازگاری محصول است.
 - سرعت نهایی روی هر ISP به route بین کاربر و دیتاسنتر فرانکفورت وابسته است؛ benchmark سرور جای تست واقعی دستگاه کاربر را نمی‌گیرد.

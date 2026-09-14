@@ -1,8 +1,9 @@
 import json
+from urllib.parse import parse_qs, urlsplit
 
 from backend.app.models import AccessKey, Node, User
 from backend.app.security import encrypt_payload
-from backend.app.services.profiles import cisco_credentials, wireguard_profile
+from backend.app.services.profiles import cisco_credentials, vless_uri, wireguard_profile
 
 
 def test_wireguard_profile_contains_required_peer_fields():
@@ -46,3 +47,41 @@ def test_cisco_credentials_are_decrypted_for_admin_export():
         "username": "arena-user",
         "password": "secret",
     }
+
+
+def test_reality_profile_uses_adaptive_host_and_xray_parameters():
+    user = User(id="user-id", name="Reality User")
+    node = Node(
+        id="node-id",
+        name="ARENA Reality",
+        slug="arena-reality",
+        protocol="vless",
+        transport="tcp",
+        security="reality",
+        host="auto",
+        port=2053,
+        sni="www.google.com",
+        fingerprint="chrome",
+        metadata_json=json.dumps(
+            {
+                "adaptive_endpoint": True,
+                "public_key": "public-key",
+                "short_id": "0123456789abcdef",
+                "flow": "xtls-rprx-vision",
+                "spider_x": "/",
+            }
+        ),
+    )
+    key = AccessKey(credential="33333333-3333-4333-8333-333333333333")
+
+    uri = vless_uri(user, node, key, "https://panel.example.com")
+    parsed = urlsplit(uri)
+    params = parse_qs(parsed.query)
+    assert parsed.hostname == "panel.example.com"
+    assert parsed.port == 2053
+    assert params["security"] == ["reality"]
+    assert params["type"] == ["tcp"]
+    assert params["sni"] == ["www.google.com"]
+    assert params["pbk"] == ["public-key"]
+    assert params["sid"] == ["0123456789abcdef"]
+    assert params["flow"] == ["xtls-rprx-vision"]

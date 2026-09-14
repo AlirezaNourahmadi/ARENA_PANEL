@@ -39,6 +39,9 @@ services:
       - "8000"
       - "11000"
       - "11001"
+      - "${ARENA_XRAY_REALITY_LISTEN_PORT:-12000}"
+    ports:
+      - "${ARENA_XRAY_REALITY_PUBLIC_PORT:-2053}:${ARENA_XRAY_REALITY_LISTEN_PORT:-12000}/tcp"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 10s

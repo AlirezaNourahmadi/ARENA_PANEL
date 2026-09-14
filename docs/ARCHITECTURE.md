@@ -6,7 +6,7 @@
 2. `gateway`: سرویس Go برای WebSocket. قبل از Upgrade مجوز می‌گیرد، IP و سرعت را اعمال می‌کند و ترافیک را گزارش می‌دهد.
 3. `arena`: برنامه FastAPI و فایل‌های build شده React. این کانتینر پردازش رسمی Xray Core را نیز مدیریت می‌کند.
 4. `postgres`: منبع اصلی و پایدار کاربران، کلیدها، نشست‌ها، مصرف و رویدادها.
-5. `xray`: دو inbound داخلی VLESS و VMess و یک API داخلی HandlerService/StatsService دارد.
+5. `xray`: دو inbound داخلی WebSocket، یک inbound اختیاری VLESS/REALITY و APIهای HandlerService/StatsService/RoutingService دارد.
 
 ## مسیر داده
 
@@ -22,7 +22,15 @@ Client
   -> Destination
 ```
 
-ورودی‌های Xray مستقیماً publish نشده‌اند. مسیر عمومی فقط Gateway است؛ بنابراین کاربر پیش از رسیدن به Xray از کنترل سهمیه، اعتبار و IP عبور می‌کند.
+ورودی‌های WebSocket مستقیماً publish نشده‌اند. مسیر عمومی آن‌ها فقط Gateway است؛ بنابراین کاربر پیش از رسیدن به Xray از کنترل سهمیه، اعتبار و IP عبور می‌کند.
+
+مسیر بازیابی REALITY عمداً از HTTP و WebSocket مستقل است:
+
+```text
+Client -> public-host:2053/TCP -> Xray REALITY :12000 -> Destination
+```
+
+این ورودی با متغیر محیطی فعال می‌شود. کلید خصوصی فقط در `.env` سرور می‌ماند. برنامه آمار ترافیک و IPهای آنلاین را هر ۱۵ ثانیه از StatsService می‌خواند، در PostgreSQL ثبت می‌کند و ruleهای محدودیت IP را با RoutingService همگام می‌سازد. سهمیه و انقضا با حذف پویا از inbound اعمال می‌شوند. محدودیت سرعت token bucket فقط متعلق به Gateway است و روی REALITY اعمال نمی‌شود.
 
 ## همگام‌سازی Xray
 
@@ -32,6 +40,7 @@ Client
 
 ```text
 {credential}@{protocol}.arena
+{credential}@reality.arena
 ```
 
 این شناسه فقط برای مدیریت داخلی Xray است و در UI نمایش داده نمی‌شود.
@@ -55,4 +64,4 @@ Client
 
 ## مرز مقیاس‌پذیری فاز ۱
 
-محدودیت IP در PostgreSQL اعمال می‌شود و میان replicaها مشترک است. token bucket سرعت داخل حافظه Gateway نگهداری می‌شود؛ برای اعمال دقیق سرعت تجمیعی با چند replica باید در فاز بعد state محدودکننده به Redis منتقل شود. در فاز ۱ Gateway را با یک replica اجرا کنید.
+محدودیت IP در PostgreSQL اعمال می‌شود و میان replicaها مشترک است. در مسیر REALITY، IPهای آنلاین هسته منبع اعمال ruleهای user+source هستند. token bucket سرعت داخل حافظه Gateway نگهداری می‌شود؛ برای اعمال دقیق سرعت روی REALITY به data plane دارای shaping کاربرمحور نیاز است و در نسخه فعلی فعال نیست. در فاز ۱ Gateway را با یک replica اجرا کنید.

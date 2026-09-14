@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     xray_internal_host: str = "arena"
     xray_public_host: str = "localhost"
     xray_public_port: int = 8080
+    xray_reality_enabled: bool = False
+    xray_reality_listen_port: int = 12000
+    xray_reality_public_port: int = 2053
+    xray_reality_private_key: str = ""
+    xray_reality_public_key: str = ""
+    xray_reality_short_id: str = ""
+    xray_reality_server_name: str = "www.google.com"
+    xray_reality_target: str = "www.google.com:443"
+    xray_stats_interval_seconds: int = Field(default=15, ge=5, le=300)
     gateway_public_path: str = "/edge"
     trust_proxy_headers: bool = True
     session_stale_seconds: int = 45
@@ -61,6 +70,23 @@ class Settings(BaseSettings):
             if weak:
                 raise RuntimeError(
                     "Production requires PostgreSQL and explicitly configured credentials"
+                )
+        if self.xray_reality_enabled:
+            private_key = self.xray_reality_private_key.strip()
+            public_key = self.xray_reality_public_key.strip()
+            short_id = self.xray_reality_short_id.strip().lower()
+            if (
+                not private_key
+                or not public_key
+                or any(marker in private_key for marker in ("replace-", "change-me"))
+                or any(marker in public_key for marker in ("replace-", "change-me"))
+                or not short_id
+                or len(short_id) > 16
+                or len(short_id) % 2
+                or any(character not in "0123456789abcdef" for character in short_id)
+            ):
+                raise RuntimeError(
+                    "REALITY requires a private key, matching public key, and an even-length short ID"
                 )
 
 

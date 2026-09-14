@@ -23,6 +23,13 @@ Compose یک volume فقط برای PostgreSQL می‌سازد. برنامه و 
 | `ARENA_ADMIN_PASSWORD` | رمز قوی مدیر اولیه |
 | `ARENA_COOKIE_SECURE=true` | ارسال cookie فقط روی HTTPS |
 | `ARENA_TRUSTED_PROXY_HOPS` | تعداد proxyهای قابل اعتماد جلوی Gateway |
+| `ARENA_XRAY_REALITY_ENABLED` | فعال‌کردن مسیر اختیاری VLESS/TCP/REALITY |
+| `ARENA_XRAY_REALITY_PRIVATE_KEY` | کلید خصوصی X25519؛ فقط در secretهای محیط production |
+| `ARENA_XRAY_REALITY_PUBLIC_KEY` | کلید عمومی متناظر برای تولید لینک کاربر |
+| `ARENA_XRAY_REALITY_SHORT_ID` | short ID هگز با طول زوج، حداکثر ۱۶ کاراکتر |
+| `ARENA_XRAY_REALITY_SERVER_NAME` | SNI مقصد TLS 1.3 آزموده‌شده |
+| `ARENA_XRAY_REALITY_TARGET` | مقصد REALITY به‌صورت `host:port` |
+| `ARENA_XRAY_REALITY_PUBLIC_PORT` | پورت TCP عمومی REALITY؛ پیش‌فرض `2053` |
 
 ## آدرس‌دهی adaptive
 
@@ -42,8 +49,8 @@ Compose یک volume فقط برای PostgreSQL می‌سازد. برنامه و 
 
 1. PostgreSQL پایدار بسازید و backup دوره‌ای فعال کنید.
 2. image برنامه و image Gateway را deploy کنید.
-3. پورت‌های 11000، 11001 و 10085 را public نکنید.
-4. فقط ingress عمومی 443 را به Caddy/Ingress بدهید.
+3. پورت‌های 11000، 11001، 12000 و 10085 را public نکنید.
+4. ingress عمومی 443 را به Caddy/Ingress بدهید و فقط در صورت فعال‌بودن REALITY، پورت TCP تنظیم‌شده (پیش‌فرض 2053) را مستقیماً به 12000 کانتینر `arena` publish کنید.
 5. `/edge/*` به Gateway و بقیه مسیرها به `arena:8000` route شوند.
 6. Gateway و برنامه باید در یک شبکه خصوصی به هم و Xray دسترسی داشته باشند.
 7. health check برنامه `/api/health` و health check Gateway `/health` است.
@@ -78,3 +85,4 @@ Downgrade migration شمارنده‌ها از BIGINT به INTEGER ممکن اس
 4. یک مقصد HTTPS و DNS را تست کنید.
 5. در بخش ردیابی باید IP، uplink، downlink و close reason دیده شود.
 6. در log برنامه فقط یک پیام startup هسته دیده شود؛ ساخت کاربر نباید Xray را restart کند.
+7. اگر REALITY فعال است، `scripts/reality-acceptance.sh` باید انتقال داده، accounting و ثبت session را با یک کاربر موقت تأیید کند.

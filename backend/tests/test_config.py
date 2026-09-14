@@ -24,3 +24,19 @@ def test_production_accepts_explicit_credentials():
         admin_password="a-long-admin-password-2026",
     )
     settings.validate_production_secrets()
+
+
+def test_reality_rejects_missing_key_material():
+    settings = Settings(xray_reality_enabled=True)
+    with pytest.raises(RuntimeError, match="REALITY requires"):
+        settings.validate_production_secrets()
+
+
+def test_reality_accepts_complete_key_material():
+    settings = Settings(
+        xray_reality_enabled=True,
+        xray_reality_private_key="private-key",
+        xray_reality_public_key="public-key",
+        xray_reality_short_id="0123456789abcdef",
+    )
+    settings.validate_production_secrets()

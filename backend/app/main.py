@@ -12,10 +12,11 @@ from sqlalchemy import select, text
 from .config import get_settings
 from .database import SessionLocal
 from .migrations import migrate_database
-from .models import Admin, Node
+from .models import AccessKey, Admin, Node, User
 from .routes import auth, dashboard, gateway, nodes, subscriptions, users
 from .security import hash_password
 from .services.audit import audit
+from .services.accounts import create_access_key
 from .xray import xray_runtime
 
 
@@ -73,6 +74,58 @@ def seed_database() -> None:
                 node.security = "tls"
                 node.sni = ""
                 node.websocket_host = "auto"
+
+        if settings.xray_reality_enabled:
+            reality = db.scalar(select(Node).where(Node.slug == "arena-reality"))
+            if not reality:
+                reality = Node(
+                    name="ARENA Reality",
+                    slug="arena-reality",
+                    kind="xray",
+                    protocol="vless",
+                    transport="tcp",
+                    host="auto",
+                    port=settings.xray_reality_public_port,
+                    security="reality",
+                    sni=settings.xray_reality_server_name,
+                    websocket_host="",
+                    path="/",
+                    fingerprint="chrome",
+                    alpn="",
+                    metadata_json="{}",
+                )
+                db.add(reality)
+                db.flush()
+
+            reality_metadata = json.loads(reality.metadata_json or "{}")
+            backfill_users = not reality_metadata.get("existing_users_provisioned", False)
+            reality_metadata.update(
+                {
+                    "adaptive_endpoint": True,
+                    "public_key": settings.xray_reality_public_key,
+                    "short_id": settings.xray_reality_short_id,
+                    "flow": "xtls-rprx-vision",
+                    "spider_x": "/",
+                    "existing_users_provisioned": True,
+                }
+            )
+            reality.host = "auto"
+            reality.port = settings.xray_reality_public_port
+            reality.security = "reality"
+            reality.sni = settings.xray_reality_server_name
+            reality.fingerprint = "chrome"
+            reality.metadata_json = json.dumps(reality_metadata, separators=(",", ":"))
+
+            if backfill_users:
+                for user in db.scalars(select(User)):
+                    existing = db.scalar(
+                        select(AccessKey).where(
+                            AccessKey.user_id == user.id,
+                            AccessKey.node_id == reality.id,
+                        )
+                    )
+                    if not existing:
+                        create_access_key(db, user, reality)
         db.commit()
 
 
