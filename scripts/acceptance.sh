@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -f .env ]]; then
-  set -a
-  source .env
-  set +a
-fi
+env_value() {
+  local key="$1"
+  [[ -f .env ]] || return 0
+  sed -n "s/^${key}=//p" .env | tail -n 1
+}
 
 base_url="${ARENA_ACCEPTANCE_URL:-http://localhost:8080}"
-admin_user="${ARENA_ACCEPTANCE_USER:-${ARENA_ADMIN_USERNAME:-admin}}"
-admin_password="${ARENA_ACCEPTANCE_PASSWORD:-${ARENA_ADMIN_PASSWORD:-}}"
+file_admin_user="$(env_value ARENA_ADMIN_USERNAME)"
+file_admin_password="$(env_value ARENA_ADMIN_PASSWORD)"
+admin_user="${ARENA_ACCEPTANCE_USER:-${ARENA_ADMIN_USERNAME:-${file_admin_user:-admin}}}"
+admin_password="${ARENA_ACCEPTANCE_PASSWORD:-${ARENA_ADMIN_PASSWORD:-$file_admin_password}}"
 compose_file="${ARENA_ACCEPTANCE_COMPOSE_FILE:-docker-compose.yml}"
 docker_network="${ARENA_ACCEPTANCE_DOCKER_NETWORK:-arena_default}"
 proxy_address="${ARENA_ACCEPTANCE_PROXY_ADDRESS:-caddy}"
@@ -43,7 +45,7 @@ csrf=$(awk '$6 == "arena_csrf" {print $7}' "$runtime_dir/cookies.txt")
 
 curl -fsS -b "$runtime_dir/cookies.txt" -H "X-CSRF-Token: $csrf" \
   "$base_url/api/nodes" > "$runtime_dir/nodes.json"
-if ! vless_node=$(jq -er 'first(.[] | select(.protocol == "vless" and .enabled == true)) | .id' "$runtime_dir/nodes.json"); then
+if ! vless_node=$(jq -er 'first(.[] | select(.protocol == "vless" and .transport == "websocket" and .enabled == true)) | .id' "$runtime_dir/nodes.json"); then
   echo "acceptance failed: no enabled VLESS node" >&2
   exit 1
 fi

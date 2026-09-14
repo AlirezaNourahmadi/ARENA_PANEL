@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -f .env ]]; then
-  set -a
-  source .env
-  set +a
-fi
+env_value() {
+  local key="$1"
+  [[ -f .env ]] || return 0
+  sed -n "s/^${key}=//p" .env | tail -n 1
+}
 
 base_url="${ARENA_ACCEPTANCE_URL:-http://localhost:8080}"
-admin_user="${ARENA_ACCEPTANCE_USER:-${ARENA_ADMIN_USERNAME:-admin}}"
-admin_password="${ARENA_ACCEPTANCE_PASSWORD:-${ARENA_ADMIN_PASSWORD:-}}"
+file_admin_user="$(env_value ARENA_ADMIN_USERNAME)"
+file_admin_password="$(env_value ARENA_ADMIN_PASSWORD)"
+file_stats_wait="$(env_value ARENA_XRAY_STATS_INTERVAL_SECONDS)"
+admin_user="${ARENA_ACCEPTANCE_USER:-${ARENA_ADMIN_USERNAME:-${file_admin_user:-admin}}}"
+admin_password="${ARENA_ACCEPTANCE_PASSWORD:-${ARENA_ADMIN_PASSWORD:-$file_admin_password}}"
 docker_network="${ARENA_ACCEPTANCE_DOCKER_NETWORK:-arena_default}"
-stats_wait="${ARENA_XRAY_STATS_INTERVAL_SECONDS:-15}"
+stats_wait="${ARENA_XRAY_STATS_INTERVAL_SECONDS:-${file_stats_wait:-15}}"
 reality_address="${ARENA_ACCEPTANCE_REALITY_ADDRESS:-}"
 reality_port="${ARENA_ACCEPTANCE_REALITY_PORT:-}"
 runtime_dir="${TMPDIR:-/tmp}/arena-reality-acceptance-$$"
