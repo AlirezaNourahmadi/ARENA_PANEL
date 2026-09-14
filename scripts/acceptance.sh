@@ -43,8 +43,14 @@ csrf=$(awk '$6 == "arena_csrf" {print $7}' "$runtime_dir/cookies.txt")
 
 curl -fsS -b "$runtime_dir/cookies.txt" -H "X-CSRF-Token: $csrf" \
   "$base_url/api/nodes" > "$runtime_dir/nodes.json"
-vless_node=$(jq -r '.[] | select(.protocol == "vless") | .id' "$runtime_dir/nodes.json")
-vmess_node=$(jq -r '.[] | select(.protocol == "vmess") | .id' "$runtime_dir/nodes.json")
+if ! vless_node=$(jq -er 'first(.[] | select(.protocol == "vless" and .enabled == true)) | .id' "$runtime_dir/nodes.json"); then
+  echo "acceptance failed: no enabled VLESS node" >&2
+  exit 1
+fi
+if ! vmess_node=$(jq -er 'first(.[] | select(.protocol == "vmess" and .enabled == true)) | .id' "$runtime_dir/nodes.json"); then
+  echo "acceptance failed: no enabled VMess node" >&2
+  exit 1
+fi
 jq -n --arg vless "$vless_node" --arg vmess "$vmess_node" \
   '{name:"ARENA Acceptance", quota_gb:1, validity_days:7, max_ips:1, speed_mbps:0, node_ids:[$vless,$vmess]}' \
   > "$runtime_dir/create.json"
