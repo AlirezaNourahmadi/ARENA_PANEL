@@ -84,6 +84,7 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+      - "${ARENA_FALLBACK_TLS_PORT:-8443}:443"
     volumes:
       - ./deploy/Caddyfile.vps:/etc/caddy/Caddyfile:ro
       - arena-caddy-data:/data

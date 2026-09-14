@@ -5,7 +5,7 @@
 ## معماری
 
 ```text
-Internet :80/:443
+Internet :80/:443/:8443
   -> Caddy
      -> /edge/* -> Gateway :8081
      -> other   -> ARENA :8000
@@ -13,7 +13,7 @@ Gateway -> Xray :11000/:11001
 ARENA/Gateway -> PostgreSQL
 ```
 
-تنها Caddy پورت عمومی دارد. PostgreSQL، Gateway، پنل و inboundهای Xray داخل شبکه Docker باقی می‌مانند.
+تنها Caddy پورت عمومی دارد. پورت `8443` همان TLS listener را به‌عنوان مسیر پشتیبان منتشر می‌کند و با `ARENA_FALLBACK_TLS_PORT` قابل تغییر است. PostgreSQL، Gateway، پنل و inboundهای Xray داخل شبکه Docker باقی می‌مانند.
 
 ## نصب اولیه
 
@@ -104,8 +104,20 @@ ufw allow OpenSSH
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw allow 443/udp
+ufw allow 8443/tcp
 ufw --force enable
 ```
+
+## مسیر TLS پشتیبان
+
+اگر مسیر مستقیم ISP روی SNI دامنه یا پورت `443` مختل شد، یک hostname ثانویه با گواهی معتبر به `ARENA_SITE_ADDRESS` اضافه کنید و در پنل یک Node غیر adaptive با همان hostname و پورت `8443` بسازید. نمونه:
+
+```text
+ARENA_SITE_ADDRESS=panel.example.com, edge.example.net
+ARENA_FALLBACK_TLS_PORT=8443
+```
+
+Node پشتیبان همچنان از Caddy، Gateway و Xray عبور می‌کند؛ بنابراین محدودیت حجم، IP، سرعت و ثبت نشست‌ها دور زده نمی‌شود. دامنه اصلی و پورت `443` نیز فعال می‌مانند.
 
 ## کنترل سلامت
 
